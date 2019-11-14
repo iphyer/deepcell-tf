@@ -686,7 +686,7 @@ def _get_detections(generator,
                 bboxes = annotation['bboxes']
                 input_bboxes = np.expand_dims(bboxes, axis=0)
 
-                inputs = [input_image, input_bboxes] 
+                inputs = [input_image, input_bboxes]
 
             # run network
             results = model.predict_on_batch(inputs)

@@ -432,7 +432,7 @@ class RetinaNetIterator(Iterator):
             batch_x_bbox = np.zeros(batch_x_bbox_shape, dtype=K.floatx())
 
             for i, ann in enumerate(annotations_list):
-                batch_x_bbox[i,:ann['bboxes'].shape[0], :4] = ann['bboxes']
+                batch_x_bbox[i, :ann['bboxes'].shape[0], :4] = ann['bboxes']
 
         if self.include_masks:
             # masks_batch has shape: (batch size, max_annotations,
