@@ -235,13 +235,19 @@ def retinanet_mask(inputs,
         inputs (tensor): List of tensorflow.keras.layers.Input.
             The first input is the image, the second input the blob of masks.
         num_classes (int): Integer, number of classes to classify.
+        frames_per_batch (int): If not 1, process this many frames per batch.
         retinanet_model (tensorflow.keras.Model): RetinaNet model that predicts
             regression and classification values.
         anchor_params (AnchorParameters): Struct containing anchor parameters.
         nms (bool): Whether to use NMS.
         class_specific_filter (bool): Use class specific filtering.
-        roi_submodels (list): Submodels for processing ROIs.
+        crop_size (tuple): length-2 tuple for x and y size of crops.
+        mask_size (tuple): length-2 tuple for x and y size of masks.
         name (str): Name of the model.
+        roi_submodels (list): Submodels for processing ROIs.
+        max_detections (int): Maximum object detections per image.
+        score_threshold (int): Maximum number of detections to output.
+        nms_threshold (int): Maximum overlap threshold for FilterDetections.
         mask_dtype (str): Dtype to use for mask tensors.
         kwargs (dict): Additional kwargs to pass to the retinanet bbox model.
 
@@ -291,9 +297,10 @@ def retinanet_mask(inputs,
 
     if panoptic:
         # Determine the number of semantic heads
-        n_semantic_heads = len([1 for layer in retinanet_model.layers if 'semantic' in layer.name])
+        n_semantic_heads = len([1 for layer in retinanet_model.layers
+                                if 'semantic' in layer.name])
 
-        # The  panoptic output should not be sent to filter detections
+        # The panoptic output should not be sent to filter detections
         other = retinanet_model.outputs[2:-n_semantic_heads]
         semantic = retinanet_model.outputs[-n_semantic_heads:]
     else:
