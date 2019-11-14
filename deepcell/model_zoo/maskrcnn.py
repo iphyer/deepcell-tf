@@ -316,12 +316,12 @@ def retinanet_mask(inputs,
     else:
         # split up in known outputs and "other"
         detections = FilterDetections(
-        nms=nms,
-        nms_threshold=nms_threshold,
-        score_threshold=score_threshold,
-        class_specific_filter=class_specific_filter,
-        max_detections=max_detections,
-        name='filtered_detections'
+            nms=nms,
+            nms_threshold=nms_threshold,
+            score_threshold=score_threshold,
+            class_specific_filter=class_specific_filter,
+            max_detections=max_detections,
+            name='filtered_detections'
         )([boxes, classification] + other)
 
         boxes = detections[0]
