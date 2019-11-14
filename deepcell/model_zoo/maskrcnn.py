@@ -317,9 +317,9 @@ def retinanet_mask(inputs,
 
     # filter detections (apply NMS / score threshold / select top-k)
     if shape_mask:
+        detections = []
         boxes = Input(shape=(None, 4))
         inputs = [image, boxes]
-
     else:
         # split up in known outputs and "other"
         detections = FilterDetections(
@@ -344,10 +344,6 @@ def retinanet_mask(inputs,
     trainable_outputs = [ConcatenateBoxes(name=name)([boxes, output])
                          for (name, _), output in zip(
                              roi_submodels, maskrcnn_outputs)]
-
-    # reconstruct the new output
-    if shape_mask:
-        detections = []
 
     outputs = [regression, classification] + other + trainable_outputs + \
         detections + maskrcnn_outputs
