@@ -404,6 +404,7 @@ def retinanet_bbox(model=None,
                    nms=True,
                    panoptic=False,
                    num_semantic_heads=1,
+                   shape_mask=False,
                    class_specific_filter=True,
                    name='retinanet-bbox',
                    anchor_params=None,
@@ -495,11 +496,12 @@ def retinanet_bbox(model=None,
         name='filtered_detections'
     )([boxes, classification] + other)
 
-    # add the semantic head's output if needed
+    # add conditional outputs if necessary
+    outputs = detections
+    if shape_mask:
+        outputs = outputs + other
     if panoptic:
-        outputs = detections + list(semantic)
-    else:
-        outputs = detections
+        outputs = outputs + list(semantic)
 
     # construct the model
     return Model(inputs=model.inputs, outputs=outputs, name=name)

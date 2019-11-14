@@ -676,15 +676,7 @@ def train_model_retinanet(model,
     print('Training on {} GPUs'.format(num_gpus))
 
     # evaluation of model is done on `retinanet_bbox`
-    if shape_mask:
-        prediction_model = shapemask_bbox(
-            model,
-            nms=True,
-            anchor_params=anchor_params,
-            num_semantic_heads=len(n_semantic_classes),
-            panoptic=panoptic,
-            class_specific_filter=False)
-    elif include_masks:
+    if include_masks:
         prediction_model = model
     else:
         prediction_model = retinanet_bbox(
@@ -693,6 +685,7 @@ def train_model_retinanet(model,
             anchor_params=anchor_params,
             num_semantic_heads=len(n_semantic_classes),
             panoptic=panoptic,
+            shape_mask=shape_mask,
             class_specific_filter=False)
 
     retinanet_losses = losses.RetinaNetLosses(sigma=sigma, alpha=alpha, gamma=gamma,
