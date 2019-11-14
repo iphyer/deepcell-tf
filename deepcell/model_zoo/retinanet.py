@@ -403,7 +403,6 @@ def retinanet(inputs,
 def retinanet_bbox(model=None,
                    nms=True,
                    panoptic=False,
-                   num_semantic_heads=1,
                    shape_mask=False,
                    class_specific_filter=True,
                    name='retinanet-bbox',
@@ -477,10 +476,13 @@ def retinanet_bbox(model=None,
 
     # "other" can be any additional output from custom submodels, by default []
     if panoptic:
+        # Determine the number of semantic heads
+        n_semantic_heads = len([1 for layer in model.layers
+                                if 'semantic' in layer.name])
         # The last output is the panoptic output, which should not be
         # sent to filter detections
-        other = model.outputs[2:-num_semantic_heads]
-        semantic = model.outputs[-num_semantic_heads:]
+        other = model.outputs[2:-n_semantic_heads]
+        semantic = model.outputs[-n_semantic_heads:]
     else:
         other = model.outputs[2:]
 

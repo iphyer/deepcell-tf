@@ -652,12 +652,6 @@ def train_model_retinanet(model,
     channel_axis = 1 if is_channels_first else -1
     n_classes = model.layers[-1].output_shape[channel_axis]
 
-    if panoptic:
-        n_semantic_classes = [layer.output_shape[channel_axis]
-                              for layer in model.layers if 'semantic' in layer.name]
-    else:
-        n_semantic_classes = []
-
     # the data, shuffled and split between train and test sets
     print('X_train shape:', train_dict['X'].shape)
     print('y_train shape:', train_dict['y'].shape)
@@ -683,7 +677,6 @@ def train_model_retinanet(model,
             model,
             nms=True,
             anchor_params=anchor_params,
-            num_semantic_heads=len(n_semantic_classes),
             panoptic=panoptic,
             shape_mask=shape_mask,
             class_specific_filter=False)
