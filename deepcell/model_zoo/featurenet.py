@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Van Valen Lab at the California Institute of
+# Copyright 2016-2020 The Van Valen Lab at the California Institute of
 # Technology (Caltech), with support from the Paul Allen Family Foundation,
 # Google, & National Institutes of Health (NIH) under Grant U24CA224309-01.
 # All rights reserved.
@@ -31,19 +31,20 @@ from __future__ import division
 
 import numpy as np
 
-from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.models import Sequential, Model
-from tensorflow.python.keras.layers import Conv2D, Conv3D, LSTM
-from tensorflow.python.keras.layers import Input, Concatenate, InputLayer
-from tensorflow.python.keras.layers import Flatten, Dense, Reshape
-from tensorflow.python.keras.layers import MaxPool2D, MaxPool3D
-from tensorflow.python.keras.layers import Cropping2D, Cropping3D
-from tensorflow.python.keras.layers import Activation, Softmax
-from tensorflow.python.keras.layers import BatchNormalization
-from tensorflow.python.keras.layers import ZeroPadding2D, ZeroPadding3D
-from tensorflow.python.keras.regularizers import l2
-from tensorflow.python.keras import utils as keras_utils
+from tensorflow.keras import backend as K
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Conv2D, Conv3D, LSTM, ConvLSTM2D
+from tensorflow.keras.layers import Input, Concatenate, InputLayer
+from tensorflow.keras.layers import Add, Flatten, Dense, Reshape
+from tensorflow.keras.layers import MaxPool2D, MaxPool3D
+from tensorflow.keras.layers import Cropping2D, Cropping3D
+from tensorflow.keras.layers import Activation, Softmax
+from tensorflow.keras.layers import BatchNormalization
+from tensorflow.keras.layers import ZeroPadding2D, ZeroPadding3D
+from tensorflow.keras.regularizers import l2
+from tensorflow.keras import utils as keras_utils
 
+from deepcell.layers import ConvGRU2D
 from deepcell.layers import DilatedMaxPool2D, DilatedMaxPool3D
 from deepcell.layers import ImageNormalization2D, ImageNormalization3D
 from deepcell.layers import Location2D, Location3D
@@ -79,10 +80,13 @@ def bn_feature_net_2D(receptive_field=61,
         reg (int): regularization value
         n_conv_filters (int): number of convolutional filters
         n_dense_filters (int): number of dense filters
-        VGG_mode (bool): If multires, uses VGG_mode for multiresolution
+        VGG_mode (bool): If ``multires``, uses ``VGG_mode``
+            for multiresolution
         init (str): Method for initalizing weights.
-        norm_method (str): ImageNormalization mode to use
-        location (bool): Whether to include location data
+        norm_method (str): Normalization method to use with the
+            :mod:`deepcell.layers.normalization.ImageNormalization2D` layer.
+        location (bool): Whether to include a
+            :mod:`deepcell.layers.location.Location2D` layer.
         dilated (bool): Whether to use dilated pooling.
         padding (bool): Whether to use padding.
         padding_mode (str): Type of padding, one of 'reflect' or 'zero'
@@ -213,7 +217,7 @@ def bn_feature_net_2D(receptive_field=61,
         if not dilated:
             x.append(Flatten()(x[-1]))
 
-        x.append(Softmax(axis=channel_axis)(x[-1]))
+        x.append(Softmax(axis=channel_axis, dtype=K.floatx())(x[-1]))
 
     if inputs is not None:
         real_inputs = keras_utils.get_source_inputs(x[0])
@@ -245,9 +249,10 @@ def bn_feature_net_skip_2D(receptive_field=61,
         last_only (bool): Model will only output the final prediction,
             and not return any of the underlying model predictions.
         n_skips (int): The number of skip-connections
-        norm_method (str): The type of ImageNormalization to use
+        norm_method (str): Normalization method to use with the
+            :mod:`deepcell.layers.normalization.ImageNormalization2D` layer.
         padding_mode (str): Type of padding, one of 'reflect' or 'zero'
-        kwargs (dict): Other model options defined in bn_feature_net_2D
+        kwargs (dict): Other model options defined in `~bn_feature_net_2D`
 
     Returns:
         tensorflow.keras.Model: 2D FeatureNet with skip-connections
@@ -313,7 +318,10 @@ def bn_feature_net_3D(receptive_field=61,
                       padding=False,
                       padding_mode='reflect',
                       multires=False,
-                      include_top=True):
+                      include_top=True,
+                      temporal=None,
+                      residual=False,
+                      temporal_kernel_size=3):
     """Creates a 3D featurenet.
 
     Args:
@@ -325,15 +333,21 @@ def bn_feature_net_3D(receptive_field=61,
         reg (int): regularization value
         n_conv_filters (int): number of convolutional filters
         n_dense_filters (int): number of dense filters
-        VGG_mode (bool): If multires, uses VGG_mode for multiresolution
+        VGG_mode (bool): If ``multires``, uses ``VGG_mode``
+            for multiresolution
         init (str): Method for initalizing weights.
-        norm_method (str): ImageNormalization mode to use
-        location (bool): Whether to include location data
+        norm_method (str): Normalization method to use with the
+            :mod:`deepcell.layers.normalization.ImageNormalization3D` layer.
+        location (bool): Whether to include a
+            :mod:`deepcell.layers.location.Location3D` layer.
         dilated (bool): Whether to use dilated pooling.
         padding (bool): Whether to use padding.
         padding_mode (str): Type of padding, one of 'reflect' or 'zero'
         multires (bool): Enables multi-resolution mode
         include_top (bool): Whether to include the final layer of the model
+        temporal (str): Type of temporal operation
+        residual (bool): Whether to use temporal information as a residual
+        temporal_kernel_size (int): size of 2D kernel used in temporal convolutions
 
     Returns:
         tensorflow.keras.Model: 3D FeatureNet
@@ -446,7 +460,41 @@ def bn_feature_net_3D(receptive_field=61,
                     kernel_initializer=init, padding='valid',
                     kernel_regularizer=l2(reg))(x[-1]))
     x.append(BatchNormalization(axis=channel_axis)(x[-1]))
-    x.append(Activation('relu')(x[-1]))
+    feature = Activation('relu')(x[-1])
+
+    def __merge_temporal_features(feature, mode='conv', residual=False, n_filters=256,
+                                  n_frames=3, padding=True, temporal_kernel_size=3):
+        if mode is None:
+            return feature
+
+        mode = str(mode).lower()
+        if mode == 'conv':
+            x = Conv3D(n_filters, (n_frames, temporal_kernel_size, temporal_kernel_size),
+                       kernel_initializer=init, padding='same', activation='relu',
+                       kernel_regularizer=l2(reg))(feature)
+        elif mode == 'lstm':
+            x = ConvLSTM2D(filters=n_filters, kernel_size=temporal_kernel_size,
+                           padding='same', kernel_initializer=init, activation='relu',
+                           kernel_regularizer=l2(reg), return_sequences=True)(feature)
+        elif mode == 'gru':
+            x = ConvGRU2D(filters=n_filters, kernel_size=temporal_kernel_size,
+                          padding='same', kernel_initializer=init, activation='relu',
+                          kernel_regularizer=l2(reg), return_sequences=True)(feature)
+        else:
+            raise ValueError('`temporal` must be one of "conv", "lstm", "gru" or None')
+
+        if residual is True:
+            temporal_feature = Add()([feature, x])
+        else:
+            temporal_feature = x
+        temporal_feature_normed = BatchNormalization(axis=channel_axis)(temporal_feature)
+        return temporal_feature_normed
+
+    temporal_feature = __merge_temporal_features(feature, mode=temporal, residual=residual,
+                                                 n_filters=n_dense_filters, n_frames=n_frames,
+                                                 padding=padding,
+                                                 temporal_kernel_size=temporal_kernel_size)
+    x.append(temporal_feature)
 
     x.append(TensorProduct(n_dense_filters, kernel_initializer=init,
                            kernel_regularizer=l2(reg))(x[-1]))
@@ -460,7 +508,7 @@ def bn_feature_net_3D(receptive_field=61,
         x.append(Flatten()(x[-1]))
 
     if include_top:
-        x.append(Softmax(axis=channel_axis)(x[-1]))
+        x.append(Softmax(axis=channel_axis, dtype=K.floatx())(x[-1]))
 
     model = Model(inputs=x[0], outputs=x[-1])
 
@@ -485,9 +533,10 @@ def bn_feature_net_skip_3D(receptive_field=61,
         last_only (bool): Model will only output the final prediction,
             and not return any of the underlying model predictions.
         n_skips (int): The number of skip-connections
-        norm_method (str): The type of ImageNormalization to use
+        norm_method (str): Normalization method to use with the
+            :mod:`deepcell.layers.normalization.ImageNormalization3D` layer.
         padding_mode (str): Type of padding, one of 'reflect' or 'zero'
-        kwargs (dict): Other model options defined in bn_feature_net_3D
+        kwargs (dict): Other model options defined in `~bn_feature_net_3D`
 
     Returns:
         tensorflow.keras.Model: 3D FeatureNet with skip-connections
@@ -678,7 +727,7 @@ def siamese_model(input_shape=None,
     dense2 = Dense(128)(relu1)
     bn2 = BatchNormalization(axis=channel_axis)(dense2)
     relu2 = Activation('relu')(bn2)
-    dense3 = Dense(3, activation='softmax')(relu2)
+    dense3 = Dense(3, activation='softmax', dtype=K.floatx())(relu2)
 
     # Instantiate model
     final_layer = dense3

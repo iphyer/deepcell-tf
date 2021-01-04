@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Van Valen Lab at the California Institute of
+# Copyright 2016-2020 The Van Valen Lab at the California Institute of
 # Technology (Caltech), with support from the Paul Allen Family Foundation,
 # Google, & National Institutes of Health (NIH) under Grant U24CA224309-01.
 # All rights reserved.
@@ -34,8 +34,12 @@ from scipy import ndimage
 from skimage.measure import label
 from skimage.measure import regionprops
 from skimage.morphology import ball, disk
-from skimage.morphology import binary_erosion, binary_dilation
-from tensorflow.python.keras import backend as K
+from skimage.morphology import binary_erosion
+from skimage.morphology import binary_dilation
+from skimage.segmentation import find_boundaries
+from tensorflow.keras import backend as K
+
+from deepcell_toolbox import erode_edges
 
 
 def pixelwise_transform(mask, dilation_radius=None, data_format=None,
@@ -43,142 +47,107 @@ def pixelwise_transform(mask, dilation_radius=None, data_format=None,
     """Transforms a label mask for a z stack edge, interior, and background
 
     Args:
-        mask (tensor): tensor of labels
+        mask (numpy.array): tensor of labels
         dilation_radius (int):  width to enlarge the edge feature of
             each instance
-        data_format (str): 'channels_first' or 'channels_last'
+        data_format (str): A string, one of ``channels_last`` (default)
+            or ``channels_first``. The ordering of the dimensions in the
+            inputs. ``channels_last`` corresponds to inputs with shape
+            ``(batch, height, width, channels)`` while ``channels_first``
+            corresponds to inputs with shape
+            ``(batch, channels, height, width)``.
         separate_edge_classes (bool): Whether to separate the cell edge class
             into 2 distinct cell-cell edge and cell-background edge classes.
 
     Returns:
-        numpy.array: one-hot encoded tensor of masks:
-            if not separate_edge_classes: [cell_edge, cell_interior, background]
-            otherwise: [bg_cell_edge, cell_cell_edge, cell_interior, background]
+        numpy.array: An array with the same shape as ``mask``, except the
+        channel axis will be a one-hot encoded semantic segmentation for
+        3 main features:
+        ``[cell_edge, cell_interior, background]``.
+        If ``separate_edge_classes`` is ``True``, the ``cell_interior``
+        feature is split into 2 features and the resulting channels are:
+        ``[bg_cell_edge, cell_cell_edge, cell_interior, background]``.
     """
     if data_format is None:
         data_format = K.image_data_format()
 
     if data_format == 'channels_first':
-        channel_axis = 1
+        channel_axis = 0
     else:
-        channel_axis = len(mask.shape) - 1
-
-    mask = np.squeeze(mask, axis=channel_axis)
+        channel_axis = -1
 
     # Detect the edges and interiors
-    new_masks = np.zeros(mask.shape)
-    edges = np.zeros(mask.shape)
-    strel = ball(1) if mask.ndim > 3 else disk(1)
-    for cell_label in np.unique(mask):
-        if cell_label != 0:
-            for i in range(mask.shape[0]):
-                # get the cell interior
-                img = mask[i] == cell_label
-                img = binary_erosion(img, strel)
-                new_masks[i] += img
+    edge = find_boundaries(mask, mode='inner').astype('int')
+    interior = np.logical_and(edge == 0, mask > 0).astype('int')
 
-    interiors = np.multiply(new_masks, mask)
-    edges = (mask - interiors > 0).astype('int')
-    interiors = (interiors > 0).astype('int')
-
+    strel = ball(1) if mask.ndim > 2 else disk(1)
     if not separate_edge_classes:
         if dilation_radius:
-            dil_strel = ball(dilation_radius) if mask.ndim > 3 else disk(dilation_radius)
+            dil_strel = ball(dilation_radius) if mask.ndim > 2 else disk(dilation_radius)
             # Thicken cell edges to be more pronounced
-            for i in range(edges.shape[0]):
-                edges[i] = binary_dilation(edges[i], selem=dil_strel)
+            edge = binary_dilation(edge, selem=dil_strel)
 
             # Thin the augmented edges by subtracting the interior features.
-            edges = (edges - interiors > 0).astype('int')
+            edge = (edge - interior > 0).astype('int')
 
-        background = (1 - edges - interiors > 0)
+        background = (1 - edge - interior > 0)
         background = background.astype('int')
 
         all_stacks = [
-            edges,
-            interiors,
+            edge,
+            interior,
             background
         ]
 
         return np.stack(all_stacks, axis=channel_axis)
 
     # dilate the background masks and subtract from all edges for background-edges
-    dilated_background = np.zeros(mask.shape)
-    for i in range(mask.shape[0]):
-        background = (mask[i] == 0).astype('int')
-        dilated_background[i] = binary_dilation(background, strel)
+    background = (mask == 0).astype('int')
+    dilated_background = binary_dilation(background, strel)
 
-    background_edges = (edges - dilated_background > 0).astype('int')
+    background_edge = (edge - dilated_background > 0).astype('int')
 
     # edges that are not background-edges are interior-edges
-    interior_edges = (edges - background_edges > 0).astype('int')
+    interior_edge = (edge - background_edge > 0).astype('int')
 
     if dilation_radius:
-        dil_strel = ball(dilation_radius) if mask.ndim > 3 else disk(dilation_radius)
+        dil_strel = ball(dilation_radius) if mask.ndim > 2 else disk(dilation_radius)
         # Thicken cell edges to be more pronounced
-        for i in range(edges.shape[0]):
-            interior_edges[i] = binary_dilation(interior_edges[i], selem=dil_strel)
-            background_edges[i] = binary_dilation(background_edges[i], selem=dil_strel)
+        interior_edge = binary_dilation(interior_edge, selem=dil_strel)
+        background_edge = binary_dilation(background_edge, selem=dil_strel)
 
         # Thin the augmented edges by subtracting the interior features.
-        interior_edges = (interior_edges - interiors > 0).astype('int')
-        background_edges = (background_edges - interiors > 0).astype('int')
+        interior_edge = (interior_edge - interior > 0).astype('int')
+        background_edge = (background_edge - interior > 0).astype('int')
 
-    background = (1 - background_edges - interior_edges - interiors > 0)
+    background = (1 - background_edge - interior_edge - interior > 0)
     background = background.astype('int')
 
     all_stacks = [
-        background_edges,
-        interior_edges,
-        interiors,
+        background_edge,
+        interior_edge,
+        interior,
         background
     ]
 
     return np.stack(all_stacks, axis=channel_axis)
 
 
-def erode_edges(mask, erosion_width):
-    """Erode edge of objects to prevent them from touching
+def outer_distance_transform_2d(mask, bins=None, erosion_width=None,
+                                normalize=True):
+    """Transform a label mask with an outer distance transform.
 
     Args:
-        mask (numpy.array): uniquely labeled instance mask
-        erosion_width (int): integer value for pixel width to erode edges
+        mask (numpy.array): A label mask (``y`` data).
+        bins (int): The number of transformed distance classes. If ``None``,
+            returns the continuous outer transform.
+        erosion_width (int): Number of pixels to erode edges of each labels
+        normalize (bool): Normalize the transform of each cell by that
+            cell's largest distance.
 
     Returns:
-        numpy.array: mask where each instance has had the edges eroded
-
-    Raises:
-        ValueError: mask.ndim is not 2 or 3
-    """
-    if erosion_width:
-        new_mask = np.zeros(mask.shape)
-        if mask.ndim == 2:
-            strel = disk(erosion_width)
-        elif mask.ndim == 3:
-            strel = ball(erosion_width)
-        else:
-            raise ValueError('erode_edges expects arrays of ndim 2 or 3.'
-                             'Got ndim: {}'.format(mask.ndim))
-        for cell_label in np.unique(mask):
-            if cell_label != 0:
-                temp_img = mask == cell_label
-                temp_img = binary_erosion(temp_img, strel)
-                new_mask = np.where(mask == cell_label, temp_img, new_mask)
-        return np.multiply(new_mask, mask).astype('int')
-    return mask
-
-
-def distance_transform_2d(mask, bins=16, erosion_width=None):
-    """Transform a label mask into distance classes.
-
-    Args:
-        mask (numpy.array): a label mask (y data)
-        bins (int): the number of transformed distance classes
-        erosion_width (int): number of pixels to erode edges of each labels
-
-    Returns:
-        numpy.array: a mask of same shape as input mask,
-            with each label being a distance class from 1 to bins
+        numpy.array: A mask of same shape as input mask,
+        with each label being a distance class from 1 to ``bins``.
     """
     mask = np.squeeze(mask)  # squeeze the channels
     mask = erode_edges(mask, erosion_width)
@@ -186,163 +155,279 @@ def distance_transform_2d(mask, bins=16, erosion_width=None):
     distance = ndimage.distance_transform_edt(mask)
     distance = distance.astype(K.floatx())  # normalized distances are floats
 
-    # uniquely label each cell and normalize the distance values
-    # by that cells maximum distance value
-    label_matrix = label(mask)
-    for prop in regionprops(label_matrix):
-        labeled_distance = distance[label_matrix == prop.label]
-        normalized_distance = labeled_distance / np.amax(labeled_distance)
-        distance[label_matrix == prop.label] = normalized_distance
+    if normalize:
+        # uniquely label each cell and normalize the distance values
+        # by that cells maximum distance value
+        label_matrix = label(mask)
+        for prop in regionprops(label_matrix):
+            labeled_distance = distance[label_matrix == prop.label]
+            normalized_distance = labeled_distance / np.amax(labeled_distance)
+            distance[label_matrix == prop.label] = normalized_distance
+
+    if bins is None:
+        return distance
 
     # bin each distance value into a class from 1 to bins
     min_dist = np.amin(distance)
     max_dist = np.amax(distance)
-    bins = np.linspace(min_dist - K.epsilon(), max_dist + K.epsilon(), num=bins + 1)
-    distance = np.digitize(distance, bins, right=True)
+    distance_bins = np.linspace(min_dist - K.epsilon(),
+                                max_dist + K.epsilon(),
+                                num=bins + 1)
+    distance = np.digitize(distance, distance_bins, right=True)
     return distance - 1  # minimum distance should be 0, not 1
 
 
-def distance_transform_3d(maskstack, bins=4, erosion_width=None):
-    """Transforms a label mask for a z stack into distance classes
+def outer_distance_transform_3d(mask, bins=None, erosion_width=None,
+                                normalize=True, sampling=[0.5, 0.217, 0.217]):
+    """Transforms a label mask for a z stack with an outer distance transform.
     Uses scipy's distance_transform_edt
 
     Args:
-        maskstack (numpy.array): a z-stack of label masks (y data)
-        bins (int): the number of transformed distance classes
-        erosion_width (int): number of pixels to erode edges of each labels
+        mask (numpy.array): A z-stack of label masks (``y`` data).
+        bins (int): The number of transformed distance classes.
+        erosion_width (int): Number of pixels to erode edges of each labels.
+        normalize (bool): Normalize the transform of each cell by that
+            cell's largest distance.
+        sampling (list): Spacing of pixels along each dimension.
 
     Returns:
         numpy.array: 3D Euclidiean Distance Transform
     """
-    maskstack = np.squeeze(maskstack)  # squeeze the channels
+    maskstack = np.squeeze(mask)  # squeeze the channels
     maskstack = erode_edges(maskstack, erosion_width)
 
-    distance = ndimage.distance_transform_edt(maskstack, sampling=[0.5, 0.217, 0.217])
+    distance = ndimage.distance_transform_edt(maskstack, sampling=sampling)
 
     # normalize by maximum distance
-    for cell_label in np.unique(maskstack):
-        if cell_label == 0:  # distance is only found for non-zero regions
-            continue
-        index = np.nonzero(maskstack == cell_label)
-        distance[index] = distance[index] / np.amax(distance[index])
+    if normalize:
+        for cell_label in np.unique(maskstack):
+            if cell_label == 0:  # distance is only found for non-zero regions
+                continue
+            index = np.nonzero(maskstack == cell_label)
+            distance[index] = distance[index] / np.amax(distance[index])
+
+    if bins is None:
+        return distance
+
     # divide into bins
     min_dist = np.amin(distance.flatten())
     max_dist = np.amax(distance.flatten())
-    bins = np.linspace(min_dist - K.epsilon(), max_dist + K.epsilon(), num=bins + 1)
-    distance = np.digitize(distance, bins, right=True)
+    distance_bins = np.linspace(min_dist - K.epsilon(),
+                                max_dist + K.epsilon(),
+                                num=bins + 1)
+    distance = np.digitize(distance, distance_bins, right=True)
     return distance - 1  # minimum distance should be 0, not 1
 
 
-def centroid_weighted_distance_transform_2d(mask):
-    """Transform a label mask into 2 distance masks weighted by the centroid.
+def outer_distance_transform_movie(mask, bins=None, erosion_width=None,
+                                   normalize=True):
+    """Transform a label mask for a movie with an outer distance transform.
+    Applies the 2D transform to each frame.
 
     Args:
-        mask (numpy.array): a label mask (y data)
+        mask (numpy.array): A label mask (``y`` data).
+        bins (int): The number of transformed distance classes.
+        erosion_width (int): number of pixels to erode edges of each labels.
+        normalize (bool): Normalize the transform of each cell by that
+            cell's largest distance.
 
     Returns:
-        numpy.array: two masks of the same shape as input mask, with each label
-            being a distance class scaled by the labels centroid
-            (one image by the centroid's x-component and another by the y)
+        numpy.array: a mask of same shape as input mask,
+        with each label being a distance class from 1 to ``bins``
     """
-    mask = mask.astype('int32')
+    distances = []
+    for frame in range(mask.shape[0]):
+        mask_frame = mask[frame]
+
+        distance = outer_distance_transform_2d(
+            mask_frame, bins=bins,
+            erosion_width=erosion_width,
+            normalize=normalize)
+
+        distances.append(distance)
+
+    distances = np.stack(distances, axis=0)
+
+    return distances
+
+
+def inner_distance_transform_2d(mask, bins=None, erosion_width=None,
+                                alpha=0.1, beta=1):
+    """Transform a label mask with an inner distance transform.
+
+    .. code-block:: python
+
+        inner_distance = 1 / (1 + beta * alpha * distance_to_center)
+
+    Args:
+        mask (numpy.array): A label mask (``y`` data).
+        bins (int): The number of transformed distance classes.
+        erosion_width (int): number of pixels to erode edges of each labels
+        alpha (float, str): coefficent to reduce the magnitude of the distance
+            value. If "auto", determines ``alpha`` for each cell based on the
+            cell area.
+        beta (float): scale parameter that is used when ``alpha`` is "auto".
+
+    Returns:
+        numpy.array: a mask of same shape as input mask,
+        with each label being a distance class from 1 to ``bins``.
+
+    Raises:
+        ValueError: ``alpha`` is a string but not set to "auto".
+    """
+    # Check input to alpha
+    if isinstance(alpha, str):
+        if alpha.lower() != 'auto':
+            raise ValueError('alpha must be set to "auto"')
+
+    mask = np.squeeze(mask)
+    mask = erode_edges(mask, erosion_width)
+
     distance = ndimage.distance_transform_edt(mask)
-    distance_x = ndimage.distance_transform_edt(mask)
-    distance_y = ndimage.distance_transform_edt(mask)
+    distance = distance.astype(K.floatx())
 
-    # normalized distances are floats
-    distance_x = distance.astype(K.floatx())
-    distance_y = distance.astype(K.floatx())
-
-    # uniquely label each cell and normalize the distance values
-    # by that cells maximum distance value before multiplying by
-    # either the x-component of the centroid or y-component
     label_matrix = label(mask)
-    for prop in regionprops(np.squeeze(label_matrix)):
-        labeled_distance = distance[label_matrix == prop.label]
-        normalized_distance = labeled_distance / np.amax(labeled_distance)
-        y, x = prop.centroid
-        distance_x[label_matrix == prop.label] = normalized_distance * x
-        distance_y[label_matrix == prop.label] = normalized_distance * y
-        # it may be better to use the following to cut down on
-        # discrepancies in distance transform due to noise
-        # distance_x[label_matrix == prop.label] = x
-        # distance_y[label_matrix == prop.label] = y
 
-    return distance_x, distance_y
+    inner_distance = np.zeros(distance.shape, dtype=K.floatx())
+    for prop in regionprops(label_matrix, distance):
+        coords = prop.coords
+        center = prop.weighted_centroid
+        distance_to_center = np.sum((coords - center) ** 2, axis=1)
 
+        # Determine alpha to use
+        if str(alpha).lower() == 'auto':
+            _alpha = 1 / np.sqrt(prop.area)
+        else:
+            _alpha = float(alpha)
 
-def rotate_array_0(arr):
-    """Rotate array 0 degrees
+        center_transform = 1 / (1 + beta * _alpha * distance_to_center)
+        coords_x = coords[:, 0]
+        coords_y = coords[:, 1]
+        inner_distance[coords_x, coords_y] = center_transform
 
-    Args:
-        arr (numpy.array): input array
+    if bins is None:
+        return inner_distance
 
-    Returns:
-        numpy.array: rotated array
-    """
-    return arr
-
-
-def rotate_array_90(arr):
-    """Rotate array 90 degrees
-
-    Args:
-        arr (numpy.array): input array
-
-    Returns:
-        numpy.array: rotated array
-    """
-    axes_order = list(range(arr.ndim - 2)) + [arr.ndim - 1, arr.ndim - 2]
-    slices = [slice(None) for _ in range(arr.ndim - 2)] + \
-             [slice(None), slice(None, None, -1)]
-    return arr[tuple(slices)].transpose(axes_order)
+    # divide into bins
+    min_dist = np.amin(inner_distance.flatten())
+    max_dist = np.amax(inner_distance.flatten())
+    distance_bins = np.linspace(min_dist - K.epsilon(),
+                                max_dist + K.epsilon(),
+                                num=bins + 1)
+    inner_distance = np.digitize(inner_distance, distance_bins, right=True)
+    return inner_distance - 1  # minimum distance should be 0, not 1
 
 
-def rotate_array_180(arr):
-    """Rotate array 180 degrees
+def inner_distance_transform_3d(mask, bins=None,
+                                erosion_width=None,
+                                alpha=0.1, beta=1,
+                                sampling=[0.5, 0.217, 0.217]):
+    """Transform a label mask for a z-stack with an inner distance transform.
+
+    .. code-block:: python
+
+        inner_distance = 1 / (1 + beta * alpha * distance_to_center)
 
     Args:
-        arr (numpy.array): input array
+        mask (numpy.array): A label mask (``y`` data).
+        bins (int): The number of transformed distance classes.
+        erosion_width (int): Number of pixels to erode edges of each labels
+        alpha (float, str): Coefficent to reduce the magnitude of the distance
+            value. If ``'auto'``, determines alpha for each cell based on the
+            cell area.
+        beta (float): Scale parameter that is used when ``alpha`` is "auto".
+        sampling (list): Spacing of pixels along each dimension.
 
     Returns:
-        numpy.array: rotated array
+        numpy.array: A mask of same shape as input mask,
+        with each label being a distance class from 1 to ``bins``.
+
+    Raises:
+        ValueError: ``alpha`` is a string but not set to "auto".
     """
-    slices = [slice(None) for _ in range(arr.ndim - 2)] + \
-             [slice(None, None, -1), slice(None, None, -1)]
-    return arr[tuple(slices)]
+    # Check input to alpha
+    if isinstance(alpha, str):
+        if alpha.lower() != 'auto':
+            raise ValueError('alpha must be set to "auto"')
+
+    mask = np.squeeze(mask)
+    mask = erode_edges(mask, erosion_width)
+
+    distance = ndimage.distance_transform_edt(mask, sampling=sampling)
+    distance = distance.astype(K.floatx())
+
+    label_matrix = label(mask)
+
+    inner_distance = np.zeros(distance.shape, dtype=K.floatx())
+    for prop in regionprops(label_matrix, distance):
+        coords = prop.coords
+        center = prop.weighted_centroid
+        distance_to_center = (coords - center) * np.array(sampling)
+        distance_to_center = np.sum(distance_to_center ** 2, axis=1)
+
+        # Determine alpha to use
+        if str(alpha).lower() == 'auto':
+            _alpha = 1 / np.cbrt(prop.area)
+        else:
+            _alpha = float(alpha)
+
+        center_transform = 1 / (1 + beta * _alpha * distance_to_center)
+        coords_z = coords[:, 0]
+        coords_x = coords[:, 1]
+        coords_y = coords[:, 2]
+        inner_distance[coords_z, coords_x, coords_y] = center_transform
+
+    if bins is None:
+        return inner_distance
+
+    # divide into bins
+    min_dist = np.amin(inner_distance.flatten())
+    max_dist = np.amax(inner_distance.flatten())
+    distance_bins = np.linspace(min_dist - K.epsilon(),
+                                max_dist + K.epsilon(),
+                                num=bins + 1)
+    inner_distance = np.digitize(inner_distance, distance_bins, right=True)
+    return inner_distance - 1  # minimum distance should be 0, not 1
 
 
-def rotate_array_270(arr):
-    """Rotate array 270 degrees
+def inner_distance_transform_movie(mask, bins=None, erosion_width=None,
+                                   alpha=0.1, beta=1):
+    """Transform a label mask with an inner distance transform. Applies the
+    2D transform to each frame.
 
     Args:
-        arr (numpy.array): input array
+        mask (numpy.array): A label mask (``y`` data).
+        bins (int): The number of transformed distance classes.
+        erosion_width (int): Number of pixels to erode edges of each labels.
+        alpha (float, str): Coefficent to reduce the magnitude of the distance
+            value. If "auto", determines ``alpha`` for each cell based on the
+            cell area.
+        beta (float): Scale parameter that is used when ``alpha`` is "auto".
 
     Returns:
-        numpy.array: rotated array
+        numpy.array: A mask of same shape as input mask,
+        with each label being a distance class from 1 to ``bins``.
+
+    Raises:
+        ValueError: ``alpha`` is a string but not set to "auto".
     """
-    axes_order = list(range(arr.ndim - 2)) + [arr.ndim - 1, arr.ndim - 2]
-    slices = [slice(None) for _ in range(arr.ndim - 2)] + \
-             [slice(None, None, -1), slice(None)]
-    return arr[tuple(slices)].transpose(axes_order)
+    # Check input to alpha
+    if isinstance(alpha, str):
+        if alpha.lower() != 'auto':
+            raise ValueError('alpha must be set to "auto"')
 
+    inner_distances = []
 
-def to_categorical(y, num_classes=None):
-    """Converts a class vector (integers) to binary class matrix.
-    E.g. for use with categorical_crossentropy.
+    for frame in range(mask.shape[0]):
+        mask_frame = mask[frame]
 
-    Args:
-        y (numpy.array): class vector to be converted into a matrix
-            (integers from 0 to num_classes).
-        num_classes (int): total number of classes.
+        inner_distance = inner_distance_transform_2d(
+            mask_frame, bins=bins,
+            erosion_width=erosion_width,
+            alpha=alpha, beta=beta)
 
-    Returns:
-        numpy.array: A binary matrix representation of the input.
-    """
-    y = np.array(y, dtype='int').ravel()
-    if not num_classes:
-        num_classes = np.max(y) + 1
-    n = y.shape[0]
-    categorical = np.zeros((n, num_classes))
-    categorical[np.arange(n), y] = 1
-    return categorical
+        inner_distances.append(inner_distance)
+
+    inner_distances = np.stack(inner_distances, axis=0)
+
+    return inner_distances

@@ -1,8 +1,3 @@
-# Application generated files
-scripts/generated_notebooks/
-deepcell/utils/compute_overlap.cypthon-*
-deepcell/utils/compute_overlap.c
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -119,3 +114,8 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Data files
+*.h5
+*.trk
+*.trks

@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Van Valen Lab at the California Institute of
+# Copyright 2016-2020 The Van Valen Lab at the California Institute of
 # Technology (Caltech), with support from the Paul Allen Family Foundation,
 # Google, & National Institutes of Health (NIH) under Grant U24CA224309-01.
 # All rights reserved.
@@ -29,10 +29,9 @@ from __future__ import print_function
 from __future__ import division
 
 import tensorflow as tf
-import copy
 from tensorflow.python.framework import tensor_shape
-from tensorflow.python.keras.layers import Layer
-from tensorflow.python.keras import backend as K
+from tensorflow.keras.layers import Layer
+from tensorflow.keras import backend as K
 from tensorflow.python.keras.utils import conv_utils
 
 
@@ -40,6 +39,14 @@ class UpsampleLike(Layer):
     """Layer for upsampling a Tensor to be the same shape as another Tensor.
 
     Adapted from https://github.com/fizyr/keras-retinanet.
+
+    Args:
+        data_format (str): A string, one of ``channels_last`` (default)
+            or ``channels_first``. The ordering of the dimensions in the
+            inputs. ``channels_last`` corresponds to inputs with shape
+            ``(batch, height, width, channels)`` while ``channels_first``
+            corresponds to inputs with shape
+            ``(batch, channels, height, width)``.
     """
 
     def __init__(self, data_format=None, **kwargs):
@@ -90,6 +97,9 @@ class UpsampleLike(Layer):
         resized_volume = self._resize_drop_axis(volume, new_shape_0, axis=1)
         resized_volume = self._resize_drop_axis(resized_volume, new_shape_1, axis=3)
 
+        new_shape_static = [None, None, None, None, volume.get_shape()[-1]]
+        resized_volume.set_shape(new_shape_static)
+
         if self.data_format == 'channels_first':
             resized_volume = tf.transpose(resized_volume, (0, 4, 1, 2, 3))
 
@@ -135,7 +145,17 @@ class UpsampleLike(Layer):
 
 
 class Upsample(Layer):
-    """Upsample layer adapted from https://github.com/fizyr/keras-maskrcnn."""
+    """Upsample layer adapted from https://github.com/fizyr/keras-maskrcnn.
+
+    Args:
+        target_size (tuple): 2D tuple for target size ``(x, y)``.
+        data_format (str): A string, one of ``channels_last`` (default)
+            or ``channels_first``. The ordering of the dimensions in the
+            inputs. ``channels_last`` corresponds to inputs with shape
+            ``(batch, height, width, channels)`` while ``channels_first``
+            corresponds to inputs with shape
+            ``(batch, channels, height, width)``.
+    """
 
     def __init__(self, target_size, data_format=None, *args, **kwargs):
         self.target_size = target_size

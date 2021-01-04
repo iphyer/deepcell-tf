@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Van Valen Lab at the California Institute of
+# Copyright 2016-2020 The Van Valen Lab at the California Institute of
 # Technology (Caltech), with support from the Paul Allen Family Foundation,
 # Google, & National Institutes of Health (NIH) under Grant U24CA224309-01.
 # All rights reserved.
@@ -32,9 +32,9 @@ from __future__ import print_function
 import numpy as np
 import skimage as sk
 
-from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.preprocessing.image import array_to_img
-from tensorflow.python.keras.preprocessing.image import img_to_array
+from tensorflow.keras import backend as K
+from tensorflow.keras.preprocessing.image import array_to_img
+from tensorflow.keras.preprocessing.image import img_to_array
 from tensorflow.python.platform import test
 
 from deepcell import image_generators
@@ -66,22 +66,26 @@ class TestTransformMasks(test.TestCase):
         mask_transform = image_generators._transform_masks(
             mask, transform=None, data_format='channels_last')
         self.assertEqual(mask_transform.shape, (5, 30, 30, num_classes))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         mask = np.random.randint(num_classes, size=(5, 1, 30, 30))
         mask_transform = image_generators._transform_masks(
             mask, transform=None, data_format='channels_first')
         self.assertEqual(mask_transform.shape, (5, num_classes, 30, 30))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         # test 3D masks
         mask = np.random.randint(num_classes, size=(5, 10, 30, 30, 1))
         mask_transform = image_generators._transform_masks(
             mask, transform=None, data_format='channels_last')
         self.assertEqual(mask_transform.shape, (5, 10, 30, 30, num_classes))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         mask = np.random.randint(num_classes, size=(5, 1, 10, 30, 30))
         mask_transform = image_generators._transform_masks(
             mask, transform=None, data_format='channels_first')
         self.assertEqual(mask_transform.shape, (5, num_classes, 10, 30, 30))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
     def test_fgbg_transform(self):
         num_classes = 2  # always 2 for fg and bg
@@ -90,22 +94,26 @@ class TestTransformMasks(test.TestCase):
         mask_transform = image_generators._transform_masks(
             mask, transform='fgbg', data_format='channels_last')
         self.assertEqual(mask_transform.shape, (5, 30, 30, num_classes))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         mask = np.random.randint(3, size=(5, 1, 30, 30))
         mask_transform = image_generators._transform_masks(
             mask, transform='fgbg', data_format='channels_first')
         self.assertEqual(mask_transform.shape, (5, num_classes, 30, 30))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         # test 3D masks
         mask = np.random.randint(3, size=(5, 10, 30, 30, 1))
         mask_transform = image_generators._transform_masks(
             mask, transform='fgbg', data_format='channels_last')
         self.assertEqual(mask_transform.shape, (5, 10, 30, 30, num_classes))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         mask = np.random.randint(3, size=(5, 1, 10, 30, 30))
         mask_transform = image_generators._transform_masks(
             mask, transform='fgbg', data_format='channels_first')
         self.assertEqual(mask_transform.shape, (5, num_classes, 10, 30, 30))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
     def test_pixelwise_transform(self):
         num_classes = 3
@@ -115,12 +123,14 @@ class TestTransformMasks(test.TestCase):
             mask, transform='pixelwise', data_format='channels_last',
             separate_edge_classes=True)
         self.assertEqual(mask_transform.shape, (5, 30, 30, 4))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         mask = np.random.randint(3, size=(5, 1, 30, 30))
         mask_transform = image_generators._transform_masks(
             mask, transform='pixelwise', data_format='channels_first',
             separate_edge_classes=False)
         self.assertEqual(mask_transform.shape, (5, 3, 30, 30))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         # test 3D masks
         mask = np.random.randint(3, size=(5, 10, 30, 30, 1))
@@ -128,56 +138,161 @@ class TestTransformMasks(test.TestCase):
             mask, transform='pixelwise', data_format='channels_last',
             separate_edge_classes=False)
         self.assertEqual(mask_transform.shape, (5, 10, 30, 30, 3))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         mask = np.random.randint(3, size=(5, 1, 10, 30, 30))
         mask_transform = image_generators._transform_masks(
             mask, transform='pixelwise', data_format='channels_first',
             separate_edge_classes=True)
         self.assertEqual(mask_transform.shape, (5, 4, 10, 30, 30))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
-    def test_watershed_transform(self):
-        distance_bins = 4
-        erosion_width = 1
+    def test_outer_distance_transform(self):
+        K.set_floatx('float16')
         # test 2D masks
+        distance_bins = None
+        erosion_width = 1
         mask = np.random.randint(3, size=(5, 30, 30, 1))
         mask_transform = image_generators._transform_masks(
             mask,
-            transform='watershed',
+            transform='outer-distance',
+            distance_bins=distance_bins,
+            erosion_width=erosion_width,
+            data_format='channels_last')
+        self.assertEqual(mask_transform.shape, (5, 30, 30, 1))
+        self.assertEqual(mask_transform.dtype, np.dtype(K.floatx()))
+
+        distance_bins = 4
+        erosion_width = 1
+        mask = np.random.randint(3, size=(5, 30, 30, 1))
+        mask_transform = image_generators._transform_masks(
+            mask,
+            transform='outer-distance',
             distance_bins=distance_bins,
             erosion_width=erosion_width,
             data_format='channels_last')
         self.assertEqual(mask_transform.shape, (5, 30, 30, distance_bins))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         distance_bins = 6
         mask = np.random.randint(3, size=(5, 1, 30, 30))
         mask_transform = image_generators._transform_masks(
             mask,
-            transform='watershed',
+            transform='outer-distance',
             distance_bins=distance_bins,
             erosion_width=erosion_width,
             data_format='channels_first')
         self.assertEqual(mask_transform.shape, (5, distance_bins, 30, 30))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         # test 3D masks
+        K.set_floatx('float32')
+        distance_bins = None
+        mask = np.random.randint(3, size=(5, 10, 30, 30, 1))
+        mask_transform = image_generators._transform_masks(
+            mask,
+            transform='outer-distance',
+            distance_bins=distance_bins,
+            erosion_width=erosion_width,
+            data_format='channels_last')
+        self.assertEqual(mask_transform.shape, (5, 10, 30, 30, 1))
+        self.assertEqual(mask_transform.dtype, np.dtype(K.floatx()))
+
         distance_bins = 5
         mask = np.random.randint(3, size=(5, 10, 30, 30, 1))
         mask_transform = image_generators._transform_masks(
             mask,
-            transform='watershed',
+            transform='outer-distance',
             distance_bins=distance_bins,
             erosion_width=erosion_width,
             data_format='channels_last')
         self.assertEqual(mask_transform.shape, (5, 10, 30, 30, distance_bins))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
         distance_bins = 4
         mask = np.random.randint(3, size=(5, 1, 10, 30, 30))
         mask_transform = image_generators._transform_masks(
             mask,
-            transform='watershed',
+            transform='outer-distance',
             distance_bins=distance_bins,
             erosion_width=erosion_width,
             data_format='channels_first')
         self.assertEqual(mask_transform.shape, (5, distance_bins, 10, 30, 30))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
+
+    def test_inner_distance_transform(self):
+        K.set_floatx('float16')
+
+        # test 2D masks
+        distance_bins = None
+        erosion_width = 1
+        mask = np.random.randint(3, size=(5, 30, 30, 1))
+        mask_transform = image_generators._transform_masks(
+            mask,
+            transform='inner-distance',
+            distance_bins=distance_bins,
+            erosion_width=erosion_width,
+            data_format='channels_last')
+        self.assertEqual(mask_transform.shape, (5, 30, 30, 1))
+        self.assertEqual(mask_transform.dtype, np.dtype(K.floatx()))
+
+        distance_bins = 4
+        erosion_width = 1
+        mask = np.random.randint(3, size=(5, 30, 30, 1))
+        mask_transform = image_generators._transform_masks(
+            mask,
+            transform='inner-distance',
+            distance_bins=distance_bins,
+            erosion_width=erosion_width,
+            data_format='channels_last')
+        self.assertEqual(mask_transform.shape, (5, 30, 30, distance_bins))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
+
+        distance_bins = 6
+        mask = np.random.randint(3, size=(5, 1, 30, 30))
+        mask_transform = image_generators._transform_masks(
+            mask,
+            transform='inner-distance',
+            distance_bins=distance_bins,
+            erosion_width=erosion_width,
+            data_format='channels_first')
+        self.assertEqual(mask_transform.shape, (5, distance_bins, 30, 30))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
+
+        # test 3D masks
+        K.set_floatx('float32')
+        distance_bins = None
+        mask = np.random.randint(3, size=(5, 10, 30, 30, 1))
+        mask_transform = image_generators._transform_masks(
+            mask,
+            transform='inner-distance',
+            distance_bins=distance_bins,
+            erosion_width=erosion_width,
+            data_format='channels_last')
+        self.assertEqual(mask_transform.shape, (5, 10, 30, 30, 1))
+        self.assertEqual(mask_transform.dtype, np.dtype(K.floatx()))
+
+        distance_bins = 5
+        mask = np.random.randint(3, size=(5, 10, 30, 30, 1))
+        mask_transform = image_generators._transform_masks(
+            mask,
+            transform='inner-distance',
+            distance_bins=distance_bins,
+            erosion_width=erosion_width,
+            data_format='channels_last')
+        self.assertEqual(mask_transform.shape, (5, 10, 30, 30, distance_bins))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
+
+        distance_bins = 4
+        mask = np.random.randint(3, size=(5, 1, 10, 30, 30))
+        mask_transform = image_generators._transform_masks(
+            mask,
+            transform='inner-distance',
+            distance_bins=distance_bins,
+            erosion_width=erosion_width,
+            data_format='channels_first')
+        self.assertEqual(mask_transform.shape, (5, distance_bins, 10, 30, 30))
+        self.assertTrue(np.issubdtype(mask_transform.dtype, np.integer))
 
     def test_disc_transform(self):
         classes = np.random.randint(5, size=1)[0]
@@ -188,6 +303,7 @@ class TestTransformMasks(test.TestCase):
             transform='disc',
             data_format='channels_last')
         self.assertEqual(mask_transform.shape, (5, 30, 30, classes))
+        self.assertEqual(mask_transform.dtype, np.dtype(K.floatx()))
 
         mask = np.random.randint(classes, size=(5, 1, 30, 30))
         mask_transform = image_generators._transform_masks(
@@ -195,6 +311,7 @@ class TestTransformMasks(test.TestCase):
             transform='disc',
             data_format='channels_first')
         self.assertEqual(mask_transform.shape, (5, classes, 30, 30))
+        self.assertEqual(mask_transform.dtype, np.dtype(K.floatx()))
 
         # test 3D masks
         mask = np.random.randint(classes, size=(5, 10, 30, 30, 1))
@@ -203,6 +320,7 @@ class TestTransformMasks(test.TestCase):
             transform='disc',
             data_format='channels_last')
         self.assertEqual(mask_transform.shape, (5, 10, 30, 30, classes))
+        self.assertEqual(mask_transform.dtype, np.dtype(K.floatx()))
 
         mask = np.random.randint(classes, size=(5, 1, 10, 30, 30))
         mask_transform = image_generators._transform_masks(
@@ -210,6 +328,7 @@ class TestTransformMasks(test.TestCase):
             transform='disc',
             data_format='channels_first')
         self.assertEqual(mask_transform.shape, (5, classes, 10, 30, 30))
+        self.assertEqual(mask_transform.dtype, np.dtype(K.floatx()))
 
     def test_bad_mask(self):
         # test bad transform
@@ -1276,12 +1395,22 @@ class TestRetinaNetDataGenerator(test.TestCase):
             y_shape = tuple(list(images.shape)[:-1] + [1])
             train_dict['X'] = images
             train_dict['y'] = np.random.randint(0, 9, size=y_shape)
-            for x, (r, l) in generator.flow(
+            for x, y in generator.flow(
                     train_dict,
                     num_classes=num_classes,
+                    include_bbox=True,
+                    include_masks=True,
                     save_to_dir=temp_dir,
                     shuffle=True):
-                self.assertEqual(x.shape[1:], images.shape[1:])
+                self.assertIsInstance(x, dict)
+                self.assertEqual('input' in x, True)
+                self.assertEqual('boxes_input' in x, True)
+                self.assertEqual(x['input'].shape[1:], images.shape[1:])
+                self.assertIsInstance(y, dict)
+                self.assertEqual('regression' in y, True)
+                self.assertEqual('classification' in y, True)
+                r = y['regression']
+                l = y['classification']
                 self.assertEqual(r.shape[:-1], l.shape[:-1])
                 self.assertEqual(r.shape[-1], 5)
                 self.assertEqual(l.shape[-1], num_classes + 1)
@@ -1332,12 +1461,22 @@ class TestRetinaNetDataGenerator(test.TestCase):
             train_dict['X'] = images
             train_dict['y'] = np.random.randint(0, 9, size=y_shape)
 
-            for x, (r, l) in generator.flow(
+            for x, y in generator.flow(
                     train_dict,
                     num_classes=num_classes,
+                    include_bbox=True,
+                    include_masks=True,
                     save_to_dir=temp_dir,
                     shuffle=True):
-                self.assertEqual(x.shape[1:], images.shape[1:])
+                self.assertIsInstance(x, dict)
+                self.assertEqual('input' in x, True)
+                self.assertEqual('boxes_input' in x, True)
+                self.assertEqual(x['input'].shape[1:], images.shape[1:])
+                self.assertIsInstance(y, dict)
+                self.assertEqual('regression' in y, True)
+                self.assertEqual('classification' in y, True)
+                r = y['regression']
+                l = y['classification']
                 self.assertEqual(r.shape[:-1], l.shape[:-1])
                 self.assertEqual(r.shape[-1], 5)
                 self.assertEqual(l.shape[-1], num_classes + 1)
@@ -1441,15 +1580,26 @@ class TestRetinaMovieDataGenerator(test.TestCase):
             train_dict['X'] = images
             train_dict['y'] = np.random.randint(0, 9, size=y_shape)
 
-            for x, (r, l) in generator.flow(
+            for x, y in generator.flow(
                     train_dict,
                     frames_per_batch=frames_per_batch,
                     num_classes=num_classes,
+                    include_bbox=True,
+                    include_masks=True,
                     save_to_dir=temp_dir,
                     shuffle=True):
                 expected = list(images.shape)
                 expected[1] = frames_per_batch
-                self.assertEqual(x.shape[1:], tuple(expected)[1:])
+                expected = tuple(expected)
+                self.assertIsInstance(x, dict)
+                self.assertEqual('input' in x, True)
+                self.assertEqual('boxes_input' in x, True)
+                self.assertEqual(x['input'].shape[1:], expected[1:])
+                self.assertIsInstance(y, dict)
+                self.assertEqual('regression' in y, True)
+                self.assertEqual('classification' in y, True)
+                r = y['regression']
+                l = y['classification']
                 self.assertEqual(r.shape[:-1], l.shape[:-1])
                 self.assertEqual(r.shape[-1], 5)
                 self.assertEqual(l.shape[-1], num_classes + 1)
@@ -1510,15 +1660,27 @@ class TestRetinaMovieDataGenerator(test.TestCase):
             train_dict['X'] = images
             train_dict['y'] = np.random.randint(0, 9, size=y_shape)
 
-            for x, (r, l) in generator.flow(
+            for x, y in generator.flow(
                     train_dict,
                     num_classes=num_classes,
+                    include_bbox=True,
+                    include_masks=True,
                     frames_per_batch=frames_per_batch,
                     save_to_dir=temp_dir,
                     shuffle=True):
                 expected = list(images.shape)
                 expected[2] = frames_per_batch
-                self.assertEqual(x.shape[1:], tuple(expected)[1:])
+                expected = tuple(expected)
+                self.assertIsInstance(x, dict)
+                self.assertEqual('input' in x, True)
+                self.assertEqual('boxes_input' in x, True)
+                self.assertEqual(x['input'].shape[1:], expected[1:])
+
+                self.assertIsInstance(y, dict)
+                self.assertEqual('regression' in y, True)
+                self.assertEqual('classification' in y, True)
+                r = y['regression']
+                l = y['classification']
                 self.assertEqual(r.shape[:-1], l.shape[:-1])
                 self.assertEqual(r.shape[-1], 5)
                 self.assertEqual(l.shape[-1], num_classes + 1)
@@ -1717,4 +1879,1016 @@ class TestScaleDataGenerator(test.TestCase):
             zoom_range=(2, 2))
         with self.assertRaises(ValueError):
             generator = image_generators.ScaleDataGenerator(
+                zoom_range=(2, 2, 2))
+
+
+class TestSemanticDataGenerator(test.TestCase):
+    def test_semantic_data_generator(self):
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                img_list.append(img_to_array(im)[None, ...])
+
+            images = np.vstack(img_list)
+            generator = image_generators.SemanticDataGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                brightness_range=(1, 5),
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True)
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 10, 10, 3)),
+                'y': np.random.random((8, 10, 10, 1)),
+            }
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            generator.fit(images, augment=True, seed=1)
+            y_shape = tuple(list(images.shape)[:-1] + [1])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['outer-distance', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(len(y), len(transforms))
+                self.assertEqual(x.shape[1:], images.shape[1:])
+                break
+
+    def test_semantic_data_generator_channels_first(self):
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                img_list.append(img_to_array(im)[None, ...])
+
+            images = np.vstack(img_list)
+            images = np.rollaxis(images, 3, 1)
+            generator = image_generators.SemanticDataGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                # brightness_range=(1, 5),  # TODO: `channels_first` conflict
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True,
+                data_format='channels_first')
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 3, 10, 10)),
+                'y': np.random.random((8, 1, 10, 10)),
+            }
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            generator.fit(images, augment=True, seed=1)
+            y_shape = tuple([images.shape[0], 1] + list(images.shape)[2:])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['outer-distance', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(len(y), len(transforms))
+                self.assertEqual(x.shape[1:], images.shape[1:])
+                break
+
+    def test_semantic_data_generator_multiple_labels(self):
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                img_list.append(img_to_array(im)[None, ...])
+
+            images = np.vstack(img_list)
+            generator = image_generators.SemanticDataGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                brightness_range=(1, 5),
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True)
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 10, 10, 3)),
+                'y': np.random.random((8, 10, 10, 2)),
+            }
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+            # Fit
+            generator.fit(images, augment=True, seed=1)
+            y_shape = tuple(list(images.shape)[:-1] + [2])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['watershed-cont', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(len(y), len(transforms) * y_shape[-1])
+                self.assertEqual(x.shape[1:], images.shape[1:])
+                break
+
+    def test_semantic_data_generator_multiple_labels_channels_first(self):
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                img_list.append(img_to_array(im)[None, ...])
+
+            images = np.vstack(img_list)
+            images = np.rollaxis(images, 3, 1)
+            generator = image_generators.SemanticDataGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                # brightness_range=(1, 5),  # TODO: `channels_first` conflict
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True,
+                data_format='channels_first')
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 3, 10, 10)),
+                'y': np.random.random((8, 2, 10, 10)),
+            }
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            generator.fit(images, augment=True, seed=1)
+            y_shape = tuple([images.shape[0], 2] + list(images.shape)[2:])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['watershed-cont', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(len(y), len(transforms) * y_shape[1])
+                self.assertEqual(x.shape[1:], images.shape[1:])
+                break
+
+    def test_semantic_data_generator_invalid_data(self):
+        generator = image_generators.SemanticDataGenerator(
+            featurewise_center=True,
+            samplewise_center=True,
+            featurewise_std_normalization=True,
+            samplewise_std_normalization=True,
+            zca_whitening=True,
+            data_format='channels_last')
+
+        # Test fit with invalid data
+        with self.assertRaises(ValueError):
+            x = np.random.random((3, 10, 10))
+            generator.fit(x)
+
+        # Test flow with invalid dimensions
+        with self.assertRaises(ValueError):
+            train_dict = {
+                'X': np.random.random((8, 10, 10)),
+                'y': np.random.random((8, 10, 10))
+            }
+            generator.flow(train_dict)
+
+        # Test flow with non-matching batches
+        with self.assertRaises(Exception):
+            train_dict = {
+                'X': np.random.random((8, 10, 10, 1)),
+                'y': np.random.random((7, 10, 10, 1))
+            }
+            generator.flow(train_dict)
+        # Invalid number of channels: will work but raise a warning
+        generator.fit(np.random.random((8, 10, 10, 5)))
+
+        with self.assertRaises(ValueError):
+            generator = image_generators.SemanticDataGenerator(
+                data_format='unknown')
+
+        generator = image_generators.SemanticDataGenerator(
+            zoom_range=(2, 2))
+        with self.assertRaises(ValueError):
+            generator = image_generators.SemanticDataGenerator(
+                zoom_range=(2, 2, 2))
+
+
+class TestCroppingDataGenerator(test.TestCase):
+
+    def test_cropping_data_generator(self):
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                img_list.append(img_to_array(im)[None, ...])
+
+            images = np.vstack(img_list)
+            crop_size = (17, 17)
+            generator = image_generators.CroppingDataGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=False,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                brightness_range=(1, 5),
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True,
+                rescale=2,
+                crop_size=crop_size)
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 21, 21, 3)),
+                'y': np.random.random((8, 21, 21, 1)),
+            }
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            generator.fit(images, augment=True, seed=1)
+            y_shape = tuple(list(images.shape)[:-1] + [1])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['outer-distance', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(y[0].shape[1:3], crop_size)
+                self.assertEqual(x.shape[1:3], crop_size)
+                break
+
+            # test with no cropping
+            generator = image_generators.CroppingDataGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                brightness_range=(1, 5),
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True,
+                rescale=2,
+                crop_size=None)
+
+            for x, y in generator.flow(
+                    train_dict,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(y[0].shape[1:3], train_dict['y'].shape[1:3])
+                self.assertEqual(x.shape[1:3], train_dict['X'].shape[1:3])
+                break
+
+            # test cropsize=image_size
+            generator = image_generators.CroppingDataGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                brightness_range=(1, 5),
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True,
+                rescale=2,
+                crop_size=(21, 21))
+
+            for x, y in generator.flow(
+                    train_dict,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(y[0].shape[1:3], train_dict['y'].shape[1:3])
+                self.assertEqual(x.shape[1:3], train_dict['X'].shape[1:3])
+                break
+
+    def test_cropping_data_generator_channels_first(self):
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                img_list.append(img_to_array(im)[None, ...])
+
+            images = np.vstack(img_list)
+            images = np.rollaxis(images, 3, 1)
+            crop_size = (17, 17)
+            generator = image_generators.CroppingDataGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                # brightness_range=(1, 5),  # TODO: `channels_first` conflict
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True,
+                rescale=2,
+                crop_size=crop_size,
+                data_format='channels_first')
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 3, 21, 21)),
+                'y': np.random.random((8, 1, 21, 21)),
+            }
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            generator.fit(images, augment=True, seed=1)
+            y_shape = tuple([images.shape[0]] + [1] + list(images.shape[2:4]))
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['outer-distance', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(y[0].shape[2:4], crop_size)
+                self.assertEqual(x.shape[2:4], crop_size)
+                break
+
+            # test with no cropping
+            generator = image_generators.CroppingDataGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                # brightness_range=(1, 5),  # TODO: `channels_first` conflict
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True,
+                rescale=2,
+                crop_size=None,
+                data_format='channels_first')
+
+            for x, y in generator.flow(
+                    train_dict,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(y[0].shape[2:4], train_dict['y'].shape[2:4])
+                self.assertEqual(x.shape[2:4], train_dict['X'].shape[2:4])
+                break
+
+    def test_cropping_data_generator_invalid_data(self):
+        # invalid data with cropping
+        cropping_generator = image_generators.CroppingDataGenerator(
+            featurewise_center=True,
+            samplewise_center=True,
+            featurewise_std_normalization=True,
+            samplewise_std_normalization=True,
+            zca_whitening=True,
+            data_format='channels_last',
+            crop_size=(11, 11))
+
+        with self.assertRaises(ValueError):
+            # crop is larger than image size
+            train_dict = {
+                'X': np.random.random((8, 10, 10, 3)),
+                'y': np.random.randint(0, 9, size=(8, 10, 10, 1))
+            }
+
+            cropping_generator.flow(train_dict).next()
+
+        with self.assertRaises(ValueError):
+            # crop is equal to image size on only a single dimension
+            train_dict = {
+                'X': np.random.random((8, 15, 11, 3)),
+                'y': np.random.randint(0, 9, size=(8, 15, 11, 1))
+            }
+
+            cropping_generator.flow(train_dict).next()
+
+        with self.assertRaises(ValueError):
+            # crop size is not a list/tuple
+            cropping_generator = image_generators.CroppingDataGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                data_format='channels_last',
+                crop_size=11)
+
+
+class TestSemanticMovieGenerator(test.TestCase):
+
+    def test_semantic_movie_generator(self):
+        frames = 7
+        frames_per_batch = 5
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                frame_list = []
+                for _ in range(frames):
+                    frame_list.append(img_to_array(im)[None, ...])
+                img_stack = np.vstack(frame_list)
+                img_list.append(img_stack)
+
+            images = np.vstack(img_list)
+            batches = images.shape[0] // frames
+            images = np.reshape(images, tuple([batches, frames] +
+                                              list(images.shape[1:])))
+            generator = image_generators.SemanticMovieGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                brightness_range=(1, 5),
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True)
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 11, 10, 10, 3)),
+                'y': np.random.random((8, 11, 10, 10, 1)),
+            }
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            # generator.fit(images, augment=True, seed=1)
+            batch_x_shape = tuple([frames_per_batch] + list(images.shape[2:]))
+            y_shape = tuple(list(images.shape)[:-1] + [1])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['outer-distance', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    frames_per_batch=frames_per_batch,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(x.shape[1:], batch_x_shape)
+                self.assertEqual(len(y), len(transforms))
+                break
+
+    def test_semantic_movie_generator_channels_first(self):
+        frames = 7
+        frames_per_batch = 5
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                frame_list = []
+                for _ in range(frames):
+                    frame_list.append(img_to_array(im)[None, ...])
+                img_stack = np.vstack(frame_list)
+                img_list.append(img_stack)
+
+            images = np.vstack(img_list)
+            batch_count = images.shape[0] // frames
+            images = np.reshape(images, tuple([batch_count, frames] +
+                                              list(images.shape[1:])))
+            images = np.rollaxis(images, 4, 1)
+            generator = image_generators.SemanticMovieGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=True,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                # brightness_range=(1, 5),  # TODO: `channels_first` conflict
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True,
+                data_format='channels_first')
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 3, 11, 10, 10)),
+                'y': np.random.random((8, 1, 11, 10, 10)),
+            }
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            # generator.fit(images, augment=True, seed=1)
+            batch_x_shape = tuple([images.shape[1], frames_per_batch] +
+                                  list(images.shape[3:]))
+            y_shape = tuple([images.shape[0], 1] + list(images.shape)[2:])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['outer-distance', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    frames_per_batch=frames_per_batch,
+                    transforms=transforms,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(x.shape[1:], batch_x_shape)
+                self.assertEqual(len(y), len(transforms))
+                break
+
+    def test_semantic_movie_generator_invalid_data(self):
+        generator = image_generators.SemanticMovieGenerator(
+            featurewise_center=True,
+            samplewise_center=True,
+            featurewise_std_normalization=True,
+            samplewise_std_normalization=True,
+            zca_whitening=True,
+            data_format='channels_last')
+
+        # Test fit with invalid data
+        with self.assertRaises(ValueError):
+            x = np.random.random((3, 10, 10))
+            generator.fit(x)
+
+        # Test flow with invalid dimensions
+        with self.assertRaises(ValueError):
+            train_dict = {
+                'X': np.random.random((8, 10, 10, 1)),
+                'y': np.random.random((8, 10, 10, 1))
+            }
+            generator.flow(train_dict)
+
+        # Test flow with non-matching batches
+        with self.assertRaises(Exception):
+            train_dict = {
+                'X': np.random.random((8, 11, 10, 10, 1)),
+                'y': np.random.random((7, 11, 10, 10, 1))
+            }
+            generator.flow(train_dict)
+
+        # Test flow with bigger frames_per_batch than frames
+        with self.assertRaises(Exception):
+            train_dict = {
+                'X': np.random.random((8, 11, 10, 10, 1)),
+                'y': np.random.random((8, 11, 10, 10, 1))
+            }
+            generator.flow(train_dict, frames_per_batch=31)
+
+        # Invalid number of channels: will work but raise a warning
+        generator.fit(np.random.random((8, 3, 10, 10, 5)))
+
+        with self.assertRaises(ValueError):
+            generator = image_generators.SemanticMovieGenerator(
+                data_format='unknown')
+
+        generator = image_generators.SemanticMovieGenerator(
+            zoom_range=(2, 2))
+        with self.assertRaises(ValueError):
+            generator = image_generators.SemanticMovieGenerator(
+                zoom_range=(2, 2, 2))
+
+
+class TestSemantic3DGenerator(test.TestCase):
+
+    def test_semantic_3d_generator(self):
+        frames = 7
+        frames_per_batch = 5
+        frame_shape = (12, 12, 1)
+        output_shape = (frames_per_batch, frame_shape[0], frame_shape[1])
+        aug_3d = False
+        rotation_3d = 0
+
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                frame_list = []
+                for _ in range(frames):
+                    frame_list.append(img_to_array(im)[None, ...])
+                img_stack = np.vstack(frame_list)
+                img_list.append(img_stack)
+
+            images = np.vstack(img_list)
+            batches = images.shape[0] // frames
+            images = np.reshape(images, tuple([batches, frames] +
+                                              list(images.shape[1:])))
+            # TODO - figure out why zca whitening isn't working with 3d datagen
+            generator = image_generators.Semantic3DGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=False,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                brightness_range=(1, 5),
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True)
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 11, 10, 10, 3)),
+                'y': np.random.random((8, 11, 10, 10, 1)),
+            }
+
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            generator.fit(images, augment=True, seed=1)
+
+            batch_x_shape = tuple([frames_per_batch] + list(images.shape[2:]))
+            y_shape = tuple(list(images.shape)[:-1] + [1])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['outer-distance', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    frames_per_batch=frames_per_batch,
+                    transforms=transforms,
+                    frame_shape=frame_shape,
+                    aug_3d=aug_3d,
+                    rotation_3d=rotation_3d,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(x.shape[1:], output_shape + (x.shape[-1],))
+                self.assertEqual(len(y), len(transforms))
+                break
+
+    def test_semantic_3d_rotation(self):
+        frames = 5
+        frames_per_batch = 5
+        frame_shape = (10, 10, 1)
+        z_scale = 2
+        output_shape = (frames_per_batch, frame_shape[0], frame_shape[1])
+        aug_3d = True
+        rotation_3d = 90
+
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                frame_list = []
+                for _ in range(frames):
+                    frame_list.append(img_to_array(im)[None, ...])
+                img_stack = np.vstack(frame_list)
+                img_list.append(img_stack)
+
+            images = np.vstack(img_list)
+            batches = images.shape[0] // frames
+            images = np.reshape(images, tuple([batches, frames] +
+                                              list(images.shape[1:])))
+            generator = image_generators.Semantic3DGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=False,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                brightness_range=(1, 5),
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True)
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 11, 10, 10, 3)),
+                'y': np.random.random((8, 11, 10, 10, 1)),
+            }
+
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            generator.fit(images, augment=True, seed=1)
+            batch_x_shape = tuple([frames_per_batch] + list(images.shape[2:]))
+            y_shape = tuple(list(images.shape)[:-1] + [1])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['outer-distance', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    frames_per_batch=frames_per_batch,
+                    transforms=transforms,
+                    frame_shape=frame_shape,
+                    aug_3d=aug_3d,
+                    rotation_3d=rotation_3d,
+                    z_scale=z_scale,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(x.shape[1:], output_shape + (x.shape[-1],))
+                self.assertEqual(len(y), len(transforms))
+                break
+
+    def test_semantic_3d_generator_channels_first(self):
+        frames = 7
+        frames_per_batch = 5
+        frame_shape = (12, 12, 1)
+        output_shape = (frames_per_batch, frame_shape[0], frame_shape[1])
+        aug_3d = True
+        rotation_3d = 0
+
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                frame_list = []
+                for _ in range(frames):
+                    frame_list.append(img_to_array(im)[None, ...])
+                img_stack = np.vstack(frame_list)
+                img_list.append(img_stack)
+
+            images = np.vstack(img_list)
+            batch_count = images.shape[0] // frames
+            images = np.reshape(images, tuple([batch_count, frames] +
+                                              list(images.shape[1:])))
+            images = np.rollaxis(images, 4, 1)
+            generator = image_generators.Semantic3DGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=False,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                # brightness_range=(1, 5),  # TODO: `channels_first` conflict
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True,
+                data_format='channels_first')
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 3, 11, 10, 10)),
+                'y': np.random.random((8, 1, 11, 10, 10)),
+            }
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            generator.fit(images, augment=True, seed=1)
+            batch_x_shape = tuple([images.shape[1], frames_per_batch] +
+                                  list(images.shape[3:]))
+            y_shape = tuple([images.shape[0], 1] + list(images.shape)[2:])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['outer-distance', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    frames_per_batch=frames_per_batch,
+                    transforms=transforms,
+                    frame_shape=frame_shape,
+                    aug_3d=aug_3d,
+                    rotation_3d=rotation_3d,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(x.shape[1:], (x.shape[1],) + output_shape)
+                self.assertEqual(len(y), len(transforms))
+                break
+
+    def test_semantic_3d_generator_channels_first_rotation(self):
+        frames = 5
+        frames_per_batch = 5
+        frame_shape = (10, 10, 1)
+        z_scale = 2
+        output_shape = (frames_per_batch, frame_shape[0], frame_shape[1])
+        aug_3d = True
+        rotation_3d = 90
+
+        for test_images in _generate_test_images(21, 21):
+            img_list = []
+            for im in test_images:
+                frame_list = []
+                for _ in range(frames):
+                    frame_list.append(img_to_array(im)[None, ...])
+                img_stack = np.vstack(frame_list)
+                img_list.append(img_stack)
+
+            images = np.vstack(img_list)
+            batch_count = images.shape[0] // frames
+            images = np.reshape(images, tuple([batch_count, frames] +
+                                              list(images.shape[1:])))
+            images = np.rollaxis(images, 4, 1)
+            generator = image_generators.Semantic3DGenerator(
+                featurewise_center=True,
+                samplewise_center=True,
+                featurewise_std_normalization=True,
+                samplewise_std_normalization=True,
+                zca_whitening=False,
+                rotation_range=90.,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                shear_range=0.5,
+                zoom_range=0.2,
+                channel_shift_range=1.,
+                # brightness_range=(1, 5),  # TODO: `channels_first` conflict
+                fill_mode='nearest',
+                cval=0.5,
+                horizontal_flip=True,
+                vertical_flip=True,
+                data_format='channels_first')
+
+            # Basic test before fit
+            train_dict = {
+                'X': np.random.random((8, 3, 11, 10, 10)),
+                'y': np.random.random((8, 1, 11, 10, 10)),
+            }
+            generator.flow(train_dict)
+
+            # Temp dir to save generated images
+            temp_dir = self.get_temp_dir()
+
+            # Fit
+            generator.fit(images, augment=True, seed=1)
+            batch_x_shape = tuple([images.shape[1], frames_per_batch] +
+                                  list(images.shape[3:]))
+            y_shape = tuple([images.shape[0], 1] + list(images.shape)[2:])
+            train_dict['X'] = images
+            train_dict['y'] = np.random.randint(0, 9, size=y_shape)
+            transforms = ['outer-distance', 'fgbg']
+            for x, y in generator.flow(
+                    train_dict,
+                    frames_per_batch=frames_per_batch,
+                    transforms=transforms,
+                    frame_shape=frame_shape,
+                    aug_3d=aug_3d,
+                    rotation_3d=rotation_3d,
+                    z_scale=z_scale,
+                    save_to_dir=temp_dir,
+                    shuffle=True):
+                self.assertEqual(x.shape[1:], (x.shape[1],) + output_shape)
+                self.assertEqual(len(y), len(transforms))
+                break
+
+    def test_semantic_3d_generator_invalid_data(self):
+        generator = image_generators.Semantic3DGenerator(
+            featurewise_center=True,
+            samplewise_center=True,
+            featurewise_std_normalization=True,
+            samplewise_std_normalization=True,
+            zca_whitening=False,
+            data_format='channels_last')
+
+        # Test fit with invalid data
+        with self.assertRaises(ValueError):
+            x = np.random.random((3, 10, 10))
+            generator.fit(x)
+
+        # Test flow with invalid dimensions
+        with self.assertRaises(ValueError):
+            train_dict = {
+                'X': np.random.random((8, 10, 10, 1)),
+                'y': np.random.random((8, 10, 10, 1))
+            }
+            generator.flow(train_dict)
+
+        # Test flow with non-matching batches
+        with self.assertRaises(Exception):
+            train_dict = {
+                'X': np.random.random((8, 11, 10, 10, 1)),
+                'y': np.random.random((7, 11, 10, 10, 1))
+            }
+            generator.flow(train_dict)
+
+        # Test flow with bigger frames_per_batch than frames
+        with self.assertRaises(Exception):
+            train_dict = {
+                'X': np.random.random((8, 11, 10, 10, 1)),
+                'y': np.random.random((8, 11, 10, 10, 1))
+            }
+            generator.flow(train_dict, frames_per_batch=31)
+
+        # Invalid number of channels: will work but raise a warning
+        generator.fit(np.random.random((8, 3, 10, 10, 5)))
+
+        with self.assertRaises(ValueError):
+            generator = image_generators.Semantic3DGenerator(
+                data_format='unknown')
+
+        generator = image_generators.Semantic3DGenerator(
+            zoom_range=(2, 2))
+        with self.assertRaises(ValueError):
+            generator = image_generators.Semantic3DGenerator(
                 zoom_range=(2, 2, 2))

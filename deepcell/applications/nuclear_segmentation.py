@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Van Valen Lab at the California Institute of
+# Copyright 2016-2020 The Van Valen Lab at the California Institute of
 # Technology (Caltech), with support from the Paul Allen Family Foundation,
 # Google, & National Institutes of Health (NIH) under Grant U24CA224309-01.
 # All rights reserved.
@@ -23,57 +23,146 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Tests for PhaseSegmentationModel"""
+"""Nuclear segmentation application"""
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.python.keras.utils.data_utils import get_file
+import os
 
-from deepcell.utils.retinanet_anchor_utils import generate_anchor_params
-from deepcell import model_zoo
+import tensorflow as tf
+
+from deepcell_toolbox.processing import histogram_normalization
+from deepcell_toolbox.deep_watershed import deep_watershed
+
+from deepcell.applications import Application
 
 
-WEIGHTS_PATH = ('https://deepcell-data.s3-us-west-1.amazonaws.com/'
-                'model-weights/resnet50_panoptic_nuclear_segmentation.h5')
+MODEL_PATH = ('https://deepcell-data.s3-us-west-1.amazonaws.com/'
+              'saved-models/NuclearSegmentation-3.tar.gz')
 
 
-def NuclearSegmentationModel(input_shape=(None, None, 1),
-                             backbone='resnet50',
-                             use_pretrained_weights=True):
-    """Initialize a model for nuclear segmentation based on dapi data."""
-    backbone_levels = ['C1', 'C2', 'C3', 'C4', 'C5']
-    pyramid_levels = ['P2', 'P3', 'P4']
-    anchor_size_dict = {'P2': 8, 'P3': 16, 'P4': 32}
+class NuclearSegmentation(Application):
+    """Loads a :mod:`deepcell.model_zoo.panopticnet.PanopticNet` model
+    for nuclear segmentation with pretrained weights.
 
-    # Set up the prediction model
-    anchor_params = generate_anchor_params(pyramid_levels, anchor_size_dict)
-    model = model_zoo.RetinaMask(
-        backbone=backbone,
-        use_imagenet=False,
-        panoptic=True,
-        num_semantic_heads=2,
-        num_semantic_classes=[4, 4],
-        input_shape=input_shape,
-        num_classes=1,
-        backbone_levels=backbone_levels,
-        pyramid_levels=pyramid_levels,
-        anchor_params=anchor_params,
-        norm_method='whole_image')
+    The ``predict`` method handles prep and post processing steps
+    to return a labeled image.
 
-    if use_pretrained_weights:
-        if backbone == 'resnet50':
-            # '/data/models/resnet50_panoptic_train-val_DVV_V4.h5'
-            weights_path = get_file(
-                'resnet50_panoptic_nuclear_segmentation.h5',
-                WEIGHTS_PATH,
-                cache_subdir='models',
-                md5_hash='6e925c49cb05a1e3b0e2210220922445')
+    Example:
 
-            model.load_weights(weights_path)
-        else:
-            raise ValueError('Backbone %s does not have a weights file.' %
-                             backbone)
+    .. code-block:: python
 
-    return model
+        from skimage.io import imread
+        from deepcell.applications import NuclearSegmentation
+
+        # Load the image
+        im = imread('HeLa_nuclear.png')
+
+        # Expand image dimensions to rank 4
+        im = np.expand_dims(im, axis=-1)
+        im = np.expand_dims(im, axis=0)
+
+        # Create the application
+        app = NuclearSegmentation()
+
+        # create the lab
+        labeled_image = app.predict(image)
+
+    Args:
+        model (tf.keras.Model): The model to load. If ``None``,
+            a pre-trained model will be downloaded.
+    """
+
+    #: Metadata for the dataset used to train the model
+    dataset_metadata = {
+        'name': 'general_nuclear_train_large',
+        'other': 'Pooled nuclear data from HEK293, HeLa-S3, NIH-3T3, and RAW264.7 cells.'
+    }
+
+    #: Metadata for the model and training process
+    model_metadata = {
+        'batch_size': 64,
+        'lr': 1e-5,
+        'lr_decay': 0.99,
+        'training_seed': 0,
+        'n_epochs': 30,
+        'training_steps_per_epoch': 62556,
+        'validation_steps_per_epoch': 15627
+    }
+
+    def __init__(self, model=None):
+
+        if model is None:
+            archive_path = tf.keras.utils.get_file(
+                'NuclearSegmentation.tgz', MODEL_PATH,
+                file_hash='7fff56a59f453252f24967cfe1813abd',
+                extract=True, cache_subdir='models'
+            )
+            model_path = os.path.splitext(archive_path)[0]
+            model = tf.keras.models.load_model(model_path)
+
+        super(NuclearSegmentation, self).__init__(
+            model,
+            model_image_shape=model.input_shape[1:],
+            model_mpp=0.65,
+            preprocessing_fn=histogram_normalization,
+            postprocessing_fn=deep_watershed,
+            dataset_metadata=self.dataset_metadata,
+            model_metadata=self.model_metadata)
+
+    def predict(self,
+                image,
+                batch_size=4,
+                image_mpp=None,
+                preprocess_kwargs=None,
+                postprocess_kwargs=None):
+        """Generates a labeled image of the input running prediction with
+        appropriate pre and post processing functions.
+
+        Input images are required to have 4 dimensions
+        ``[batch, x, y, channel]``.
+
+        Additional empty dimensions can be added using ``np.expand_dims``.
+
+        Args:
+            image (numpy.array): Input image with shape
+                ``[batch, x, y, channel]``.
+            batch_size (int): Number of images to predict on per batch.
+            image_mpp (float): Microns per pixel for ``image``.
+            preprocess_kwargs (dict): Keyword arguments to pass to the
+                pre-processing function.
+            postprocess_kwargs (dict): Keyword arguments to pass to the
+                post-processing function.
+
+        Raises:
+            ValueError: Input data must match required rank of the application,
+                calculated as one dimension more (batch dimension) than expected
+                by the model.
+
+            ValueError: Input data must match required number of channels.
+
+        Returns:
+            numpy.array: Labeled image
+        """
+        if preprocess_kwargs is None:
+            preprocess_kwargs = {
+                'kernel_size': 64
+            }
+
+        if postprocess_kwargs is None:
+            postprocess_kwargs = {
+                'min_distance': 10,
+                'detection_threshold': 0.1,
+                'distance_threshold': 0.01,
+                'exclude_border': False,
+                'small_objects_threshold': 0
+            }
+
+        return self._predict_segmentation(
+            image,
+            batch_size=batch_size,
+            image_mpp=image_mpp,
+            preprocess_kwargs=preprocess_kwargs,
+            postprocess_kwargs=postprocess_kwargs)

@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Van Valen Lab at the California Institute of
+# Copyright 2016-2020 The Van Valen Lab at the California Institute of
 # Technology (Caltech), with support from the Paul Allen Family Foundation,
 # Google, & National Institutes of Health (NIH) under Grant U24CA224309-01.
 # All rights reserved.
@@ -31,7 +31,7 @@ from __future__ import print_function
 
 import os
 
-from tensorflow.python.keras.utils.data_utils import get_file
+from tensorflow.keras.utils import get_file
 
 from deepcell.utils.data_utils import get_data
 
@@ -120,14 +120,16 @@ class Dataset(object):  # pylint: disable=useless-object-inheritance
 
 # pylint: disable=line-too-long
 
+
+#:
 hek293 = Dataset(
     path='HEK293.npz',
-    url='https://deepcell-data.s3.amazonaws.com/nuclei/3T3_NIH.npz',
-    file_hash='f6520df218847fa56be2de0d3552c8a2',
+    url='https://deepcell-data.s3-us-west-1.amazonaws.com/nuclei/HEK293.npz',
+    file_hash='6221fa459350cd1e45ce6c9145264329',
     metadata={}
 )
 
-
+#:
 nih_3t3 = Dataset(
     path='3T3_NIH.npz',
     url='https://deepcell-data.s3.amazonaws.com/nuclei/3T3_NIH.npz',
@@ -135,7 +137,7 @@ nih_3t3 = Dataset(
     metadata={}
 )
 
-
+#:
 hela_s3 = Dataset(
     path='HeLa_S3.npz',
     url='https://deepcell-data.s3.amazonaws.com/nuclei/HeLa_S3.npz',
@@ -143,7 +145,7 @@ hela_s3 = Dataset(
     metadata={}
 )
 
-
+#:
 mibi = Dataset(
     path='mibi_original.npz',
     url='https://deepcell-data.s3.amazonaws.com/mibi/mibi_original.npz',
@@ -151,11 +153,19 @@ mibi = Dataset(
     metadata={}
 )
 
-
+#:
 mousebrain = Dataset(
     path='mousebrain.npz',
     url='https://deepcell-data.s3.amazonaws.com/nuclei/mousebrain.npz',
     file_hash='9c91304f7da7cc5559f46b2c5fc2eace',
+    metadata={}
+)
+
+#:
+multiplex_tissue = Dataset(
+    path='20200810_tissue_dataset.npz',
+    url='https://deepcell-data.s3.amazonaws.com/multiplex/20200810_tissue_dataset.npz',
+    file_hash='1e573b72123fd86e45433402094bf0d0',
     metadata={}
 )
 

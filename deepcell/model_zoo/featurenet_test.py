@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Van Valen Lab at the California Institute of
+# Copyright 2016-2020 The Van Valen Lab at the California Institute of
 # Technology (Caltech), with support from the Paul Allen Family Foundation,
 # Google, & National Institutes of Health (NIH) under Grant U24CA224309-01.
 # All rights reserved.
@@ -31,8 +31,10 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 
-from tensorflow.python.keras import backend as K
+from tensorflow.python.framework import test_util as tf_test_util
 from tensorflow.python.keras import keras_parameterized
+
+from tensorflow.keras import backend as K
 
 from deepcell.model_zoo import featurenet
 
@@ -200,11 +202,10 @@ class FeatureNetTest(keras_parameterized.TestCase):
             axis = 1 if data_format == 'channels_first' else -1
             self.assertEqual(model.output_shape[axis], output)
 
-    # @keras_parameterized.run_all_keras_modes
-    @parameterized.named_parameters([
-        ('channels_last',) * 2,
-        ('channels_first',) * 2,
-    ])
+    @keras_parameterized.run_all_keras_modes
+    @parameterized.named_parameters(
+        *tf_test_util.generate_combinations_with_testcase_name(
+            data_format=['channels_first', 'channels_last']))
     def test_bn_feature_net_2D_skip(self, data_format):
         receptive_field = 61
         n_features = 3
@@ -251,6 +252,9 @@ class FeatureNetTest(keras_parameterized.TestCase):
             'location': False,
             'shape': (10, 33, 33, 1),
             'data_format': 'channels_last',
+            'temporal': None,
+            'residual': False,
+            'temporal_kernel_size': 3,
         },
         {
             'testcase_name': 'dilated_include_top_cf',
@@ -262,6 +266,9 @@ class FeatureNetTest(keras_parameterized.TestCase):
             'location': False,
             'shape': (10, 33, 33, 1),
             'data_format': 'channels_first',
+            'temporal': None,
+            'residual': False,
+            'temporal_kernel_size': 3,
         },
         # {
         #     'testcase_name': 'not_dilated_include_top',
@@ -293,6 +300,9 @@ class FeatureNetTest(keras_parameterized.TestCase):
             'location': False,
             'shape': (10, 32, 32, 1),
             'data_format': 'channels_last',
+            'temporal': None,
+            'residual': False,
+            'temporal_kernel_size': 3,
         },
         {
             'testcase_name': 'dilated_no_top_cf',
@@ -304,6 +314,9 @@ class FeatureNetTest(keras_parameterized.TestCase):
             'location': False,
             'shape': (10, 32, 32, 1),
             'data_format': 'channels_first',
+            'temporal': None,
+            'residual': False,
+            'temporal_kernel_size': 3,
         },
         {
             'testcase_name': 'not_dilated_no_top',
@@ -315,6 +328,9 @@ class FeatureNetTest(keras_parameterized.TestCase):
             'location': False,
             'shape': (10, 33, 33, 1),
             'data_format': 'channels_last',
+            'temporal': None,
+            'residual': False,
+            'temporal_kernel_size': 3,
         },
         {
             'testcase_name': 'not_dilated_no_top_cf',
@@ -326,6 +342,9 @@ class FeatureNetTest(keras_parameterized.TestCase):
             'location': False,
             'shape': (10, 33, 33, 1),
             'data_format': 'channels_first',
+            'temporal': None,
+            'residual': False,
+            'temporal_kernel_size': 3,
         },
         {
             'testcase_name': 'not_dilated_no_top_location',
@@ -337,6 +356,9 @@ class FeatureNetTest(keras_parameterized.TestCase):
             'location': True,
             'shape': (10, 32, 32, 1),
             'data_format': 'channels_last',
+            'temporal': None,
+            'residual': False,
+            'temporal_kernel_size': 3,
         },
         {
             'testcase_name': 'not_dilated_no_top_location_cf',
@@ -348,6 +370,9 @@ class FeatureNetTest(keras_parameterized.TestCase):
             'location': True,
             'shape': (10, 32, 32, 1),
             'data_format': 'channels_first',
+            'temporal': None,
+            'residual': False,
+            'temporal_kernel_size': 3,
         },
         {
             'testcase_name': 'not_dilated_no_top_multires',
@@ -359,6 +384,9 @@ class FeatureNetTest(keras_parameterized.TestCase):
             'location': False,
             'shape': (10, 33, 33, 1),
             'data_format': 'channels_last',
+            'temporal': None,
+            'residual': False,
+            'temporal_kernel_size': 3,
         },
         {
             'testcase_name': 'not_dilated_no_top_multires_cf',
@@ -370,10 +398,126 @@ class FeatureNetTest(keras_parameterized.TestCase):
             'location': False,
             'shape': (10, 33, 33, 1),
             'data_format': 'channels_first',
+            'temporal': None,
+            'residual': False,
+            'temporal_kernel_size': 3,
+        },
+        {
+            'testcase_name': 'dilated_no_top_conv3D_nonresidual',
+            'include_top': False,
+            'dilated': True,
+            'padding_mode': 'zero',
+            'padding': False,
+            'multires': False,
+            'location': False,
+            'shape': (10, 32, 32, 1),
+            'data_format': 'channels_last',
+            'temporal': 'conv',
+            'residual': False,
+            'temporal_kernel_size': 3,
+        },
+        {
+            'testcase_name': 'dilated_no_top_conv3D_residual',
+            'include_top': False,
+            'dilated': True,
+            'padding_mode': 'zero',
+            'padding': False,
+            'multires': False,
+            'location': False,
+            'shape': (10, 32, 32, 1),
+            'data_format': 'channels_last',
+            'temporal': 'conv',
+            'residual': True,
+            'temporal_kernel_size': 3,
+        },
+        {
+            'testcase_name': 'dilated_no_top_convGRU2D_nonresidual',
+            'include_top': False,
+            'dilated': True,
+            'padding_mode': 'zero',
+            'padding': False,
+            'multires': False,
+            'location': False,
+            'shape': (10, 32, 32, 1),
+            'data_format': 'channels_last',
+            'temporal': 'gru',
+            'residual': False,
+            'temporal_kernel_size': 3,
+        },
+        {
+            'testcase_name': 'dilated_no_top_convgru2D_nonresidual',
+            'include_top': False,
+            'dilated': True,
+            'padding_mode': 'zero',
+            'padding': False,
+            'multires': False,
+            'location': False,
+            'shape': (10, 32, 32, 1),
+            'data_format': 'channels_last',
+            'temporal': 'GRU',
+            'residual': False,
+            'temporal_kernel_size': 3,
+        },
+        {
+            'testcase_name': 'dilated_no_top_convGRU2D_residual',
+            'include_top': False,
+            'dilated': True,
+            'padding_mode': 'zero',
+            'padding': False,
+            'multires': False,
+            'location': False,
+            'shape': (10, 32, 32, 1),
+            'data_format': 'channels_last',
+            'temporal': 'gru',
+            'residual': True,
+            'temporal_kernel_size': 3,
+        },
+        {
+            'testcase_name': 'dilated_no_top_convlstm2D_nonresidual',
+            'include_top': False,
+            'dilated': True,
+            'padding_mode': 'zero',
+            'padding': False,
+            'multires': False,
+            'location': False,
+            'shape': (10, 32, 32, 1),
+            'data_format': 'channels_last',
+            'temporal': 'lstm',
+            'residual': False,
+            'temporal_kernel_size': 3,
+        },
+        {
+            'testcase_name': 'dilated_no_top_convLSTM2D_nonresidual',
+            'include_top': False,
+            'dilated': True,
+            'padding_mode': 'zero',
+            'padding': False,
+            'multires': False,
+            'location': False,
+            'shape': (10, 32, 32, 1),
+            'data_format': 'channels_last',
+            'temporal': 'LSTM',
+            'residual': False,
+            'temporal_kernel_size': 3,
+        },
+        {
+            'testcase_name': 'dilated_no_top_convLSTM2D_residual',
+            'include_top': False,
+            'dilated': True,
+            'padding_mode': 'zero',
+            'padding': False,
+            'multires': False,
+            'location': False,
+            'shape': (10, 32, 32, 1),
+            'data_format': 'channels_last',
+            'temporal': 'lstm',
+            'residual': True,
+            'temporal_kernel_size': 3,
         },
     ])
     def test_bn_feature_net_3D(self, include_top, padding, padding_mode, shape,
-                               dilated, multires, location, data_format):
+                               dilated, multires, location, data_format,
+                               temporal, residual, temporal_kernel_size):
         n_features = 3
         n_dense_filters = 200
         n_frames = 5
@@ -392,22 +536,27 @@ class FeatureNetTest(keras_parameterized.TestCase):
                 padding_mode=padding_mode,
                 multires=multires,
                 VGG_mode=multires,
-                location=location)
+                location=location,
+                temporal=temporal,
+                residual=residual,
+                temporal_kernel_size=temporal_kernel_size)
             self.assertEqual(len(model.output_shape), 5 if dilated else 2)
             channel_axis = 1 if data_format == 'channels_first' else -1
             self.assertEqual(model.output_shape[channel_axis], n_features)
 
-    # @keras_parameterized.run_all_keras_modes
-    @parameterized.named_parameters([
-        ('channels_last',) * 2,
-        ('channels_first',) * 2,
-    ])
+    @keras_parameterized.run_all_keras_modes
+    @parameterized.named_parameters(
+        *tf_test_util.generate_combinations_with_testcase_name(
+            data_format=['channels_first', 'channels_last']))
     def test_bn_feature_net_3D_skip(self, data_format):
         receptive_field = 61
         n_features = 3
         n_dense_filters = 300
         input_shape = (10, 32, 32, 1)
         n_skips = 1
+        temporal = None
+        residual = False
+        temporal_kernel_size = 3
 
         with self.cached_session():
             K.set_image_data_format(data_format)
@@ -419,7 +568,10 @@ class FeatureNetTest(keras_parameterized.TestCase):
                 n_features=n_features,
                 n_dense_filters=n_dense_filters,
                 n_skips=n_skips,
-                last_only=False)
+                last_only=False,
+                temporal=temporal,
+                residual=residual,
+                temporal_kernel_size=temporal_kernel_size)
 
             self.assertIsInstance(fgbg_model.output, list)
             self.assertEqual(len(fgbg_model.output), n_skips + 1)
@@ -431,7 +583,10 @@ class FeatureNetTest(keras_parameterized.TestCase):
                 n_features=n_features,
                 n_dense_filters=n_dense_filters,
                 n_skips=n_skips,
-                last_only=True)
+                last_only=True,
+                temporal=temporal,
+                residual=residual,
+                temporal_kernel_size=temporal_kernel_size)
 
             self.assertEqual(len(model.output_shape), 5)
             self.assertEqual(model.output_shape[axis], n_features)

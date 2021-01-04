@@ -14,28 +14,53 @@
 #
 import os
 import sys
-import shlex
+from datetime import datetime
+import mock
+from sphinx.builders.html import StandaloneHTMLBuilder
 sys.path.insert(0, os.path.abspath('../..'))
 # sys.path.insert(0, os.path.abspath('.'))
 
+# pylint: disable=line-too-long
 
 # -- Project information -----------------------------------------------------
 
 project = 'DeepCell'
-copyright = '2016-2018, Van Valen Lab at the California Institute of Technology (Caltech)'
+copyright = ('2016-{currentyear}, Van Valen Lab at the '
+             'California Institute of Technology (Caltech)').format(
+                 currentyear=datetime.now().year)
 author = 'Van Valen Lab at Caltech'
 
 # The short X.Y version
-version = '2.0'
+version = '0.6.0'
 # The full version, including alpha/beta/rc tags
-release = '2.0.0'
+release = '0.6.0'
 
+import subprocess
+try:
+    git_rev = subprocess.check_output(['git', 'describe', '--exact-match', 'HEAD'], universal_newlines=True)
+except subprocess.CalledProcessError:
+    try:
+        git_rev = subprocess.check_output(['git', 'rev-parse', 'HEAD'], universal_newlines=True)
+    except subprocess.CalledProcessError:
+        git_rev = ''
+if git_rev:
+    git_rev = git_rev.splitlines()[0] + '/'
+
+# -- RTD configuration ------------------------------------------------
+
+# on_rtd is whether we are on readthedocs.org, this line of code grabbed from docs.readthedocs.org
+on_rtd = os.environ.get("READTHEDOCS", None) == "True"
+
+# This is used for linking and such so we link to the thing we're building
+rtd_version = os.environ.get("READTHEDOCS_VERSION", "master")
+if rtd_version not in ["stable", "latest", "master"]:
+    rtd_version = "stable"
 
 # -- General configuration ---------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
 #
-# needs_sphinx = '1.0'
+needs_sphinx = '2.3.1'
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
@@ -49,6 +74,11 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
     'm2r',
+    'IPython.sphinxext.ipython_console_highlighting',
+    'nbsphinx',
+    'nbsphinx_link',
+    'sphinx.ext.todo',
+    'sphinx.ext.autosectionlabel'
 ]
 
 napoleon_google_docstring = True
@@ -63,6 +93,9 @@ templates_path = ['_templates']
 #
 source_suffix = ['.rst', '.md']
 # source_suffix = '.rst'
+
+# Ignore warning: 
+suppress_warnings = ['autosectionlabel.*']
 
 # The master toctree document.
 master_doc = 'index'
@@ -99,7 +132,7 @@ html_theme = 'sphinx_rtd_theme'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+# html_static_path = ['_static']
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
@@ -193,38 +226,68 @@ epub_exclude_files = ['search.html']
 autodoc_mock_imports = [
     'tensorflow',
     'scipy',
+    'numpy',
     'sklearn',
     'skimage',
-    'pandas',
-    'networkx',
-    'nbformat',
     'cv2',
     'cython',
-    'keras-preprocessing',
+    'deepcell_tracking',
+    'deepcell_toolbox',
+    'matplotlib'
 ]
+
+sys.modules['deepcell.utils.compute_overlap'] = mock.Mock()
+sys.modules['tensorflow.python.keras.layers.convolutional_recurrent.ConvRNN2D'] = mock.Mock()
+
+# Disable nbsphinx extension from running notebooks
+nbsphinx_execute = 'never'
+exclude_patterns = ['_build', '**.ipynb_checkpoints']
+
+# TODO: fix relative URL for notebooks, using replace() is not perfect.
+nbsphinx_prolog = (
+r"""
+{% if env.metadata[env.docname]['nbsphinx-link-target'] %}
+{% set docpath = env.metadata[env.docname]['nbsphinx-link-target'].replace('../', '') %}
+{% else %}
+{% set docpath = env.doc2path(env.docname, base='docs/source') %}
+{% endif %}
+.. raw:: html
+
+    <div class="admonition note">
+        <p>This page was generated from <a href="https://github.com/vanvalenlab/deepcell-tf/blob/""" + git_rev + r"""{{ docpath }}">{{ docpath }}</a>
+        </p>
+    </div>
+"""
+)
 
 # -- Options for intersphinx extension ---------------------------------------
 
 intersphinx_mapping = {
-    'kiosk': ('https://deepcell-kiosk.readthedocs.io/en/latest/', None),
     'python': ('https://docs.python.org/3.7', None),
-    'numpy': ('http://docs.scipy.org/doc/numpy/', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
+    'kiosk': ('https://deepcell-kiosk.readthedocs.io/en/{}/'.format(rtd_version), None),
+    'kiosk-redis-consumer': (('https://deepcell-kiosk.readthedocs.io/'
+                              'projects/kiosk-redis-consumer/en/{}/').format(rtd_version), None),
 }
 
 intersphinx_cache_limit = 0
 
 # -- Custom Additions --------------------------------------------------------
-nitpick_ignore = [
-    ('py:class', 'function'),  # TODO: set type for "function" properly
-    ('py:class', 'tensor'),  # TODO: set type for "tensor" properly
-    ('py:class', 'numpy.array'),
-    ('py:class', 'pandas.DataFrame'),
-    ('py:class', 'tensorflow.keras.Model'),
-    ('py:class', 'tensorflow.python.keras.Model'),
-    ('py:class', 'tensorflow.keras.layers.Layer'),
-    ('py:class', 'tensorflow.python.keras.layers.Layer'),
-    ('py:class', 'tensorflow.python.keras.layers.ZeroPadding2D'),
-    ('py:class', 'tensorflow.python.keras.layers.ZeroPadding3D'),
-    ('py:class', 'tensorflow.python.keras.preprocessing.image.Iterator'),
-    ('py:class', 'tensorflow.python.keras.preprocessing.image.ImageDataGenerator'),
+nitpick_ignore = []
+# See the following page for more information and syntax:
+#  www.sphinx-doc.org/en/master/usage/configuration.html#confval-nitpick_ignore
+
+for line in open('.nitpick-ignore'):
+    line = line.strip()
+    if not line or line.startswith('#'):
+        continue
+
+    reftype, target = line.split(' ', 1)
+    nitpick_ignore.append((reftype, target.strip()))
+
+StandaloneHTMLBuilder.supported_image_types = [
+    'image/svg+xml',
+    'image/gif',
+    'image/png',
+    'image/jpeg'
 ]

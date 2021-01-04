@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Van Valen Lab at the California Institute of
+# Copyright 2016-2020 The Van Valen Lab at the California Institute of
 # Technology (Caltech), with support from the Paul Allen Family Foundation,
 # Google, & National Institutes of Health (NIH) under Grant U24CA224309-01.
 # All rights reserved.
@@ -29,13 +29,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from deepcell.applications.cell_tracking import CellTrackingModel
-from deepcell.applications.nuclear_segmentation import NuclearSegmentationModel
-from deepcell.applications.label_detection import LabelDetectionModel
-from deepcell.applications.scale_detection import ScaleDetectionModel
-from deepcell.applications.phase_segmentation import PhaseSegmentationModel
-from deepcell.applications.fluorescent_cytoplasm_segmentation import \
-    FluorCytoplasmSegmentationModel
+from deepcell.applications.application import Application
+from deepcell.applications.cytoplasm_segmentation import CytoplasmSegmentation
+from deepcell.applications.multiplex_segmentation import MultiplexSegmentation
+from deepcell.applications.nuclear_segmentation import NuclearSegmentation
+from deepcell.applications.cell_tracking import CellTracking
+from deepcell.applications.label_detection import LabelDetection
+from deepcell.applications.scale_detection import ScaleDetection
 
 del absolute_import
 del division
